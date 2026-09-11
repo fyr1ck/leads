@@ -1,0 +1,63 @@
+/* ============================================================
+   Animacoes - discretas, com cara de software profissional.
+   ============================================================ */
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes slideInRight {
+  from { opacity: 0; transform: translateX(26px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes slideUpPanel {
+  from { opacity: 0; transform: translateY(16px) scale(0.985); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes pulseDot {
+  0%, 100% { box-shadow: 0 0 0 0 currentColor; opacity: 1; }
+  70% { box-shadow: 0 0 0 7px transparent; opacity: 0.85; }
+}
+@keyframes shimmer {
+  from { background-position: -420px 0; }
+  to { background-position: 420px 0; }
+}
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+@keyframes drawLine {
+  from { stroke-dashoffset: var(--len, 1200); }
+  to { stroke-dashoffset: 0; }
+}
+@keyframes growBar {
+  from { transform: scaleY(0); }
+  to { transform: scaleY(1); }
+}
+@keyframes barraViva {
+  from { background-position: 0 0; }
+  to { background-position: 34px 0; }
+}
+@keyframes glowRing {
+  0%, 100% { opacity: 0.55; }
+  50% { opacity: 1; }
+}
+
+.anim-fade-up { animation: fadeUp var(--normal) both; }
+.anim-fade-in { animation: fadeIn var(--normal) both; }
+.anim-panel { animation: slideUpPanel var(--normal) both; }
+.stagger > * { animation: fadeUp var(--normal) both; animation-delay: calc(var(--i, 0) * 45ms); }
+
+.spin { animation: spin 900ms linear infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}

@@ -1,0 +1,35 @@
+{
+  "name": "henvix-sales-panel",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Painel local de prospeccao, WhatsApp, CRM e IA da Henvix.",
+  "engines": {
+    "node": ">=22.5.0"
+  },
+  "scripts": {
+    "dev": "concurrently -k -n API,WEB -c cyan,magenta \"npm:dev:api\" \"npm:dev:web\"",
+    "dev:api": "node --watch-path=./server server/index.js",
+    "dev:web": "npm run dev --prefix client",
+    "start": "cross-env NODE_ENV=production node server/index.js",
+    "build": "npm run build --prefix client",
+    "setup": "npm install && npm install --prefix client",
+    "test": "node --test tests/*.test.js",
+    "db:reset": "node server/scripts/resetDb.js"
+  },
+  "dependencies": {
+    "@whiskeysockets/baileys": "6.7.24",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "exceljs": "^4.4.0",
+    "express": "^4.21.2",
+    "multer": "^2.3.0",
+    "pino": "^9.5.0",
+    "qrcode": "^1.5.4",
+    "socket.io": "^4.8.3"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2",
+    "cross-env": "^7.0.3"
+  }
+}
