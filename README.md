@@ -107,7 +107,8 @@ nativo para compilar). Testado no Node 24 / Windows 11.
 | `WEB_PORT` | porta do painel (padrão 3000) |
 | `DATABASE_URL` | arquivo do banco local (`file:./data/henvix.db`) |
 | `GROQ_API_KEY` | chave da Groq — **fica só no backend** |
-| `GROQ_MODEL` | modelo usado (padrão `llama-3.3-70b-versatile`) |
+| `GROQ_MODEL` | modelo que escreve a mensagem (padrão `openai/gpt-oss-120b`) |
+| `GROQ_MODEL_ANALISE` | modelo que classifica as respostas (padrão `openai/gpt-oss-20b`) |
 | `GROQ_TEMPERATURE` | criatividade da geração de mensagem |
 | `HENVIX_SKILL_PATH` | caminho do arquivo da Skill de Vendas |
 | `WA_SESSION_DIR` | pasta da sessão do WhatsApp (sessão persistente) |
@@ -128,6 +129,27 @@ O `.env` está no `.gitignore`. Nunca comite a chave.
 2. Coloque no `.env`: `GROQ_API_KEY=gsk_...`
 3. Reinicie (`npm run dev`). O banner deve mostrar `Groq: CONNECTED`, e em
    **Configurações → Inteligência artificial** aparece o status e o modelo.
+
+**Confira se os modelos existem na sua conta.** Nem toda conta tem os mesmos
+modelos. Para listar os seus:
+
+```bash
+curl -s https://api.groq.com/openai/v1/models -H "Authorization: Bearer $GROQ_API_KEY"
+```
+
+Se algum não existir, o painel avisa em Configurações com o nome exato do modelo
+que faltou — é só trocar `GROQ_MODEL` / `GROQ_MODEL_ANALISE` no `.env`.
+
+São dois modelos de propósito: escrever a mensagem e classificar a resposta são
+tarefas diferentes, e o limite de tokens por minuto da Groq é **por modelo** —
+separar os dois dobra a folga de quem está no plano gratuito.
+
+**Sobre o plano gratuito:** a Skill inteira vai em toda requisição (~3.500
+tokens), e o free tier costuma liberar 8.000 tokens por minuto. Na prática cabem
+~2 chamadas por minuto por modelo — o que combina com o ritmo recomendado de
+envio (30–90s entre leads). Quando o limite estoura, o sistema lê o tempo de
+espera que a própria Groq devolve e aguarda exatamente isso, sem perder o lead.
+Para rodar mais rápido, o caminho é o Dev Tier da Groq.
 
 Sem chave o painel continua funcionando: a primeira mensagem usa a **abordagem
 padrão da própria Skill** e a classificação das respostas cai num classificador

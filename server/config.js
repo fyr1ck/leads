@@ -38,7 +38,10 @@ export const config = {
   webPort: num(process.env.WEB_PORT, 3000),
   groq: {
     apiKey: process.env.GROQ_API_KEY || '',
-    model: process.env.GROQ_MODEL || 'llama-3.3-70b-versatile',
+    model: process.env.GROQ_MODEL || 'openai/gpt-oss-120b',
+    // Modelo menor para classificar respostas: separa o limite por minuto do
+    // modelo de geracao e responde mais rapido.
+    modelAnalise: process.env.GROQ_MODEL_ANALISE || process.env.GROQ_MODEL || 'openai/gpt-oss-20b',
     temperature: num(process.env.GROQ_TEMPERATURE, 0.6),
     baseUrl: 'https://api.groq.com/openai/v1'
   },

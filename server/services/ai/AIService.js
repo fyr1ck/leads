@@ -4,7 +4,32 @@ import { carregarSkill, infoSkill } from './skillLoader.js';
 import { config, hasGroqKey } from '../../config.js';
 import { saudacaoDinamica } from '../../utils/greeting.js';
 import { logger } from '../../utils/logger.js';
-import { normalizarEtiqueta, TAGS_POR_SLUG, PRIORIDADES, PIPELINE_SLUGS } from '../../domain/classificacao.js';
+import {
+  normalizarEtiqueta,
+  TAGS_POR_SLUG,
+  PRIORIDADES,
+  PIPELINE_SLUGS,
+  SLUGS_VALIDOS
+} from '../../domain/classificacao.js';
+
+/**
+ * Formato exigido da analise (spec 16). Com structured output a Groq obriga o
+ * modelo a devolver exatamente isso - sem texto solto em volta do JSON.
+ */
+const ESQUEMA_ANALISE = {
+  type: 'object',
+  properties: {
+    status: { type: 'string', enum: SLUGS_VALIDOS },
+    confianca: { type: 'number' },
+    prioridade: { type: 'string', enum: Object.keys(PRIORIDADES) },
+    score: { type: 'integer' },
+    motivo: { type: 'string' },
+    proxima_etapa: { type: 'string', enum: PIPELINE_SLUGS },
+    sugestao_resposta: { type: 'string' }
+  },
+  required: ['status', 'confianca', 'prioridade', 'score', 'motivo', 'proxima_etapa', 'sugestao_resposta'],
+  additionalProperties: false
+};
 
 const vazio = (v) => v === null || v === undefined || String(v).trim() === '';
 
@@ -194,7 +219,14 @@ export const AIService = {
     }
     try {
       const { sistema, usuario } = promptAnaliseResposta({ lead, mensagem, historico });
-      const { conteudo, modelo } = await completar({ sistema, usuario, json: true, temperatura: 0.2, maxTokens: 600 });
+      const { conteudo, modelo } = await completar({
+        sistema,
+        usuario,
+        esquema: ESQUEMA_ANALISE,
+        temperatura: 0.2,
+        maxTokens: 600,
+        modelo: config.groq.modelAnalise
+      });
       const bruto = extrairJson(conteudo);
       if (!bruto) throw new Error('A IA nao devolveu JSON valido.');
       return { ...normalizarAnalise(bruto, { texto: mensagem, origem: 'GROQ' }), modelo, bruto };
