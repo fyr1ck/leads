@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Menu, Rocket, QrCode, Activity } from 'lucide-react';
+import { Menu, Rocket, QrCode, Activity, LogOut } from 'lucide-react';
 import { useApp } from '../state/AppContext.jsx';
 import { Progresso } from './ui.jsx';
 import Notificacoes from './Notificacoes.jsx';
@@ -15,7 +15,7 @@ function saudacaoAgora() {
 }
 
 export default function Topbar({ titulo, subtitulo, onMenu, acoes }) {
-  const { whatsapp, campanhaAtiva } = useApp();
+  const { whatsapp, campanhaAtiva, usuario, sair } = useApp();
   const [relogio, setRelogio] = useState(() => new Date());
 
   useEffect(() => {
@@ -54,6 +54,21 @@ export default function Topbar({ titulo, subtitulo, onMenu, acoes }) {
       {acoes}
 
       <Notificacoes />
+
+      {usuario && (
+        <span className="usuario-chip" title={usuario.email}>
+          <span className="nowrap">{String(usuario.email).split('@')[0]}</span>
+          <button
+            type="button"
+            className="btn btn-ghost btn-icon btn-sm"
+            onClick={sair}
+            title="Sair do painel"
+            aria-label="Sair"
+          >
+            <LogOut size={14} />
+          </button>
+        </span>
+      )}
 
       <Link to="/whatsapp" className={`chip ${estado}`} style={{ textDecoration: 'none' }}>
         <span className={`status-dot ${estado}`} />

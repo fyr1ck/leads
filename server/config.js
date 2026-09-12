@@ -49,6 +49,19 @@ export const config = {
     deviceName: process.env.WA_DEVICE_NAME || 'Henvix Painel',
     sessionDir: paths.waSession
   },
+  /**
+   * Quem pode entrar no painel. So estes e-mails existem como usuario -
+   * qualquer outro e recusado, mesmo sabendo a senha.
+   */
+  auth: {
+    permitidos: String(process.env.USUARIOS_PERMITIDOS || '')
+      .split(',')
+      .map((e) => e.trim().toLowerCase())
+      .filter(Boolean),
+    // Painel local: o login existe para proteger se a maquina for compartilhada
+    // ou se voce expuser a porta na rede.
+    exigirLogin: String(process.env.EXIGIR_LOGIN ?? '1') !== '0'
+  },
   // Fonte de dados publicos de estabelecimentos (spec 59.18: so API oficial).
   places: {
     apiKey: process.env.GOOGLE_MAPS_API_KEY || process.env.GOOGLE_PLACES_API_KEY || '',

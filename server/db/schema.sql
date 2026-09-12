@@ -354,3 +354,28 @@ CREATE TABLE IF NOT EXISTS notifications (
   created_at  TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS ix_notif_lida ON notifications(lida, created_at);
+
+-- ============================================================
+--  Acesso ao painel (apenas os e-mails autorizados no .env)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS users (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  email         TEXT NOT NULL UNIQUE,
+  nome          TEXT,
+  senha_hash    TEXT,              -- NULL = senha ainda nao definida
+  senha_salt    TEXT,
+  ativo         INTEGER NOT NULL DEFAULT 1,
+  ultimo_acesso TEXT,
+  created_at    TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS sessions (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  token_hash TEXT NOT NULL UNIQUE,   -- guardamos o hash, nunca o token
+  user_agent TEXT,
+  ip         TEXT,
+  expira_em  TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS ix_sessions_user ON sessions(user_id, expira_em);

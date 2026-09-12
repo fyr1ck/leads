@@ -15,6 +15,7 @@ import Campanhas from './pages/Campanhas.jsx';
 import Importar from './pages/Importar.jsx';
 import WhatsAppPage from './pages/WhatsApp.jsx';
 import Configuracoes from './pages/Configuracoes.jsx';
+import Login from './pages/Login.jsx';
 // v2 - Sales OS
 import EncontrarLeads from './pages/EncontrarLeads.jsx';
 import FollowUps from './pages/FollowUps.jsx';
@@ -48,7 +49,7 @@ const TITULOS = {
 };
 
 export default function App() {
-  const { toasts, fecharToast } = useApp();
+  const { toasts, fecharToast, sessao, logado, entrar } = useApp();
   const { pathname } = useLocation();
   const [menuAberto, setMenuAberto] = useState(false);
 
@@ -56,6 +57,20 @@ export default function App() {
     setMenuAberto(false);
     window.scrollTo({ top: 0 });
   }, [pathname]);
+
+  // ainda verificando a sessao: evita piscar a tela de login
+  if (sessao === null) {
+    return (
+      <div className="login-tela">
+        <div className="center col gap-12">
+          <div className="brand-mark" style={{ width: 44, height: 44, fontSize: 19 }}>H</div>
+          <span className="fs-13 dim">Carregando o painel...</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (!logado) return <Login onEntrou={entrar} />;
 
   const info = TITULOS[pathname] || { titulo: 'Henvix', sub: null };
 

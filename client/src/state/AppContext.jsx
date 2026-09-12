@@ -22,6 +22,7 @@ export function AppProvider({ children }) {
   const [proximasAcoes, setProximasAcoes] = useState([]);
   const [toasts, setToasts] = useState([]);
   const [conectadoSocket, setConectadoSocket] = useState(socket.connected);
+  const [sessao, setSessao] = useState(null); // null = ainda verificando
   const [ultimaResposta, setUltimaResposta] = useState(null);
   const seqToast = useRef(0);
 
@@ -71,7 +72,50 @@ export function AppProvider({ children }) {
     }
   }, []);
 
+  /** Confere a sessao antes de qualquer coisa: sem login, nada carrega. */
+  const verificarSessao = useCallback(async () => {
+    try {
+      const s = await api.get('/auth/sessao');
+      setSessao(s);
+      return s;
+    } catch {
+      setSessao({ logado: false, exigirLogin: true });
+      return null;
+    }
+  }, []);
+
+  const entrar = useCallback(
+    async (usuario) => {
+      setSessao((s) => ({ ...(s || {}), logado: true, usuario }));
+      socket.disconnect();
+      socket.connect();
+      await recarregarBase();
+      await recarregarStats();
+    },
+    [recarregarBase, recarregarStats]
+  );
+
+  const sair = useCallback(async () => {
+    try {
+      await api.post('/auth/logout', {});
+    } catch {
+      /* mesmo com erro, derruba localmente */
+    }
+    socket.disconnect();
+    setSessao({ logado: false, exigirLogin: true });
+  }, []);
+
   useEffect(() => {
+    verificarSessao();
+    const expirou = () => setSessao({ logado: false, exigirLogin: true });
+    window.addEventListener('henvix:sessao-expirada', expirou);
+    return () => window.removeEventListener('henvix:sessao-expirada', expirou);
+  }, [verificarSessao]);
+
+  const logado = sessao?.logado || sessao?.exigirLogin === false;
+
+  useEffect(() => {
+    if (!logado) return undefined;
     recarregarBase();
 
     const onInicial = (estado) => {
@@ -157,7 +201,7 @@ export function AppProvider({ children }) {
       socket.off(EVENTOS.FOLLOWUP, onMudouAlgo);
       socket.off(EVENTOS.DEMO, onMudouAlgo);
     };
-  }, [recarregarBase, recarregarAcoes, toast]);
+  }, [logado, recarregarBase, recarregarAcoes, toast]);
 
   const campanhaAtiva = useMemo(
     () => Object.values(campanhas).find((c) => c?.campanha?.status === 'ATIVA') || null,
@@ -191,13 +235,20 @@ export function AppProvider({ children }) {
       setNotificacoes,
       setNotificacoesNaoLidas,
       proximasAcoes,
-      recarregarAcoes
+      recarregarAcoes,
+      // acesso
+      sessao,
+      logado,
+      usuario: sessao?.usuario || null,
+      entrar,
+      sair,
+      verificarSessao
     }),
     [
       whatsapp, stats, logs, campanhas, campanhaAtiva, tags, settings, ia, naoLidas,
       oportunidades, ultimaResposta, conectadoSocket, toast, toasts, fecharToast,
       recarregarStats, recarregarBase, notificacoes, notificacoesNaoLidas,
-      proximasAcoes, recarregarAcoes
+      proximasAcoes, recarregarAcoes, sessao, logado, entrar, sair, verificarSessao
     ]
   );
 

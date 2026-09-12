@@ -9,6 +9,8 @@ import * as logRepo from './repositories/logRepo.js';
 import { logger } from './utils/logger.js';
 import rotas from './routes/index.js';
 import { errorHandler, notFound } from './middleware/index.js';
+import { lerCookies, carregarUsuario, exigirLogin } from './middleware/auth.js';
+import AuthService from './services/AuthService.js';
 import { criarSocket } from './realtime/socket.js';
 import whatsapp from './services/whatsapp/WhatsAppService.js';
 import campaignRunner from './services/CampaignRunner.js';
@@ -27,6 +29,13 @@ bus.on(EVENTOS.LOG, (entrada) => {
 });
 logRepo.podar(5000);
 
+// Usuarios autorizados (USUARIOS_PERMITIDOS no .env)
+const usuarios = AuthService.semearUsuarios();
+AuthService.limparSessoesExpiradas();
+if (config.auth.exigirLogin && !usuarios.length) {
+  logger.warn('auth', 'Nenhum e-mail em USUARIOS_PERMITIDOS: ninguem consegue entrar no painel.');
+}
+
 // ------------------------------------------------------------------ express
 const app = express();
 
@@ -36,13 +45,18 @@ app.use(
       `http://localhost:${config.webPort}`,
       `http://127.0.0.1:${config.webPort}`,
       `http://localhost:${config.port}`
-    ]
+    ],
+    // o cookie de sessao precisa viajar nas chamadas do painel
+    credentials: true
   })
 );
 app.use(express.json({ limit: '2mb' }));
 app.use(express.urlencoded({ extended: true }));
+app.use(lerCookies);
+app.use(carregarUsuario);
 
-app.use('/api', rotas);
+// Acesso restrito aos e-mails autorizados no .env (login e /health ficam livres)
+app.use('/api', exigirLogin, rotas);
 
 // Em producao o backend tambem serve o painel compilado (tudo em localhost).
 if (fs.existsSync(paths.clientDist)) {
@@ -109,6 +123,11 @@ async function banner() {
       { rotulo: 'Groq:', valor: statusGroq.valor, cor: statusGroq.cor },
       { rotulo: 'WhatsApp:', valor: statusWa.valor, cor: statusWa.cor },
       { rotulo: 'Skill:', valor: ia.skill?.carregada ? 'CARREGADA' : 'NAO ENCONTRADA', cor: ia.skill?.carregada ? VERDE : VERMELHO },
+      {
+        rotulo: 'Acesso:',
+        valor: config.auth.exigirLogin ? `${usuarios.filter((u) => u.ativo).length} usuario(s)` : 'LIVRE',
+        cor: config.auth.exigirLogin ? VERDE : AMARELO
+      },
       { rotulo: 'Resp. auto:', valor: 'DESATIVADA (por design)', cor: VERDE }
     ])}\n`
   );

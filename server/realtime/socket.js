@@ -7,6 +7,8 @@ import * as campaignRepo from '../repositories/campaignRepo.js';
 import * as logRepo from '../repositories/logRepo.js';
 import StatsService from '../services/StatsService.js';
 import AIService from '../services/ai/AIService.js';
+import AuthService from '../services/AuthService.js';
+import { COOKIE } from '../middleware/auth.js';
 
 /**
  * Ponte entre o bus interno e o painel (spec 5 / 49).
@@ -14,15 +16,35 @@ import AIService from '../services/ai/AIService.js';
  */
 export function criarSocket(httpServer) {
   const io = new Server(httpServer, {
+    path: '/socket.io',
+    // o cookie de sessao precisa chegar no handshake
     cors: {
       origin: [
         `http://localhost:${config.webPort}`,
         `http://127.0.0.1:${config.webPort}`,
         `http://localhost:${config.port}`
       ],
-      methods: ['GET', 'POST']
-    },
-    path: '/socket.io'
+      methods: ['GET', 'POST'],
+      credentials: true
+    }
+  });
+
+  /**
+   * O tempo real carrega os mesmos dados da API, entao exige a mesma sessao.
+   * Sem isso, bastaria abrir um socket para receber mensagens e leads.
+   */
+  io.use((socket, next) => {
+    if (!config.auth.exigirLogin) return next();
+    const bruto = socket.handshake.headers?.cookie || '';
+    const token = bruto
+      .split(';')
+      .map((p) => p.trim())
+      .find((p) => p.startsWith(`${COOKIE}=`))
+      ?.slice(COOKIE.length + 1);
+    const usuario = AuthService.validarToken(token ? decodeURIComponent(token) : null);
+    if (!usuario) return next(new Error('sessao invalida'));
+    socket.data.usuario = usuario;
+    return next();
   });
 
   // A persistencia do log fica no index.js; aqui apenas espelhamos na tela.

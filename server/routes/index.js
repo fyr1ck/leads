@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import auth from './auth.js';
 import leads from './leads.js';
 import campaigns from './campaigns.js';
 import conversations from './conversations.js';
@@ -15,6 +16,7 @@ import meta from './meta.js';
 
 const router = Router();
 
+router.use('/auth', auth);
 router.use('/leads', leads);
 router.use('/campaigns', campaigns);
 router.use('/conversations', conversations);

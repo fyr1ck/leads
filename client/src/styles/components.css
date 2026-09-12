@@ -1052,3 +1052,47 @@ table.tabela tbody tr:last-child td { border-bottom: 0; }
   resize: vertical;
 }
 .editor-skill:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+
+/* ---------------------------------------------------- v2: login */
+.login-tela {
+  position: relative;
+  z-index: 1;
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+.login-caixa {
+  width: min(408px, 100%);
+  padding: 28px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border-strong);
+  background: var(--panel);
+  backdrop-filter: blur(var(--glass-blur));
+  box-shadow: var(--shadow-lg);
+}
+.login-caixa h2 { font-size: 19px; }
+
+.usuario-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 32px;
+  padding: 0 5px 0 10px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--border);
+  background: rgba(148, 163, 184, 0.06);
+  font-size: 12.5px;
+  color: var(--text-soft);
+}
+.usuario-avatar {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 11px;
+  font-weight: 700;
+  color: #04141c;
+  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+}

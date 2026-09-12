@@ -500,3 +500,42 @@ exatamente aqueles, e nenhum outro.
 | GET/PUT | `/api/skill` | Skill + configuração comercial |
 | POST | `/api/ai/copiloto` | copiloto de vendas |
 | GET | `/api/activities` · `/notifications` · `/reports` | timeline, sino e relatórios |
+
+---
+
+## 23. Acesso ao painel (login)
+
+Só dois e-mails entram no painel, definidos no `.env`:
+
+```
+USUARIOS_PERMITIDOS=joao.jhcc31@gmail.com,castrinvini@gmail.com
+EXIGIR_LOGIN=1
+```
+
+Qualquer outro e-mail é recusado — mesmo que a pessoa descubra uma senha.
+
+**Primeiro acesso:** abra `http://localhost:3000`, escolha seu e-mail e crie sua
+senha. O sistema nunca gera senha: quem define é você. Por segurança, criar a
+senha só é permitido **no computador onde o painel roda** — assim ninguém
+"reivindica" a conta se você expuser a porta na rede.
+
+Como as senhas são guardadas:
+
+- derivadas com **scrypt** (N=16384) e um **salt aleatório por usuário**;
+- a senha em texto nunca é gravada nem registrada em log;
+- a sessão vive num cookie **httpOnly** e o banco guarda só o **hash do token**;
+- trocar a senha derruba todas as outras sessões;
+- 8 tentativas erradas em 15 minutos bloqueiam temporariamente;
+- o tempo real (Socket.IO) exige a mesma sessão — não dá para ouvir os eventos
+  sem estar logado.
+
+Esqueceu a senha? Como é um painel local, o reset é pelo terminal:
+
+```bash
+npm run auth:reset -- joao.jhcc31@gmail.com
+```
+
+Rodando sem argumento, ele lista os usuários e a situação de cada um.
+
+Para tirar ou adicionar alguém, edite `USUARIOS_PERMITIDOS` e reinicie: quem sai
+da lista perde o acesso e tem as sessões encerradas na hora.

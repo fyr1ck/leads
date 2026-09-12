@@ -8,7 +8,9 @@ export const socket = io('/', {
   path: '/socket.io',
   transports: ['websocket', 'polling'],
   reconnectionDelay: 900,
-  reconnectionDelayMax: 6000
+  reconnectionDelayMax: 6000,
+  // o cookie de sessao autentica o tempo real tambem
+  withCredentials: true
 });
 
 export const EVENTOS = {

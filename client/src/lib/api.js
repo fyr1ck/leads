@@ -5,7 +5,8 @@
 const BASE = '/api';
 
 async function req(metodo, rota, corpo, opcoes = {}) {
-  const init = { method: metodo, headers: {}, ...opcoes };
+  // credentials: o cookie de sessao precisa ir junto em toda chamada
+  const init = { method: metodo, headers: {}, credentials: 'same-origin', ...opcoes };
   if (corpo instanceof FormData) init.body = corpo;
   else if (corpo !== undefined) {
     init.headers['Content-Type'] = 'application/json';
@@ -29,6 +30,10 @@ async function req(metodo, rota, corpo, opcoes = {}) {
     const err = new Error(dados?.erro || `Erro ${resp.status}`);
     err.status = resp.status;
     err.detalhe = dados?.detalhe;
+    // sessao expirou: o painel volta para a tela de login
+    if (resp.status === 401 && dados?.precisaLogin && !rota.startsWith('/auth/')) {
+      window.dispatchEvent(new CustomEvent('henvix:sessao-expirada'));
+    }
     throw err;
   }
   return dados;
