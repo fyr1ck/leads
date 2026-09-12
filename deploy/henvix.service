@@ -1,0 +1,49 @@
+# ============================================================
+#  Henvix Sales OS - servico systemd (Linux)
+#
+#  Mantem o painel de pe 24/7: sobe no boot e reinicia sozinho
+#  se o processo cair.
+#
+#  Instalacao:
+#    sudo cp deploy/henvix.service /etc/systemd/system/
+#    sudo systemctl daemon-reload
+#    sudo systemctl enable --now henvix
+#
+#  Ver o que esta acontecendo:
+#    sudo systemctl status henvix
+#    sudo journalctl -u henvix -f
+# ============================================================
+[Unit]
+Description=Henvix Sales OS
+Documentation=https://github.com/fyr1ck/leads
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=henvix
+WorkingDirectory=/opt/henvix
+EnvironmentFile=/opt/henvix/.env
+ExecStart=/usr/bin/node server/index.js
+
+# Se cair por qualquer motivo, volta em 10s - inclusive apos queda de rede.
+Restart=always
+RestartSec=10
+
+# Uma instancia so: duas brigam pela mesma sessao do WhatsApp (erro 440).
+KillMode=mixed
+TimeoutStopSec=20
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=henvix
+
+# Endurecimento basico: o servico so escreve no que precisa.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/henvix/data /opt/henvix/skills
+
+[Install]
+WantedBy=multi-user.target

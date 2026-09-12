@@ -60,7 +60,9 @@ export const config = {
       .filter(Boolean),
     // Painel local: o login existe para proteger se a maquina for compartilhada
     // ou se voce expuser a porta na rede.
-    exigirLogin: String(process.env.EXIGIR_LOGIN ?? '1') !== '0'
+    exigirLogin: String(process.env.EXIGIR_LOGIN ?? '1') !== '0',
+    // Publicado atras de HTTPS? Ligue para o cookie de sessao so viajar cifrado.
+    cookieSeguro: String(process.env.COOKIE_SEGURO ?? '0') === '1'
   },
   // Fonte de dados publicos de estabelecimentos (spec 59.18: so API oficial).
   places: {

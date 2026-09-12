@@ -589,6 +589,9 @@ o projeto usa SQLite com SQL específico dele (`datetime('now')`, `julianday`,
 
 ### O caminho certo para 24/7 sem depender do PC
 
+> Passo a passo completo, incluindo **VPS gratuita de verdade** (Oracle Cloud
+> Always Free e Google Cloud e2-micro) e HTTPS grátis: **[deploy/README.md](deploy/README.md)**.
+
 Uma **VPS** rodando exatamente o mesmo `npm start`, com disco persistente:
 
 | Onde | Preço aproximado | Observação |

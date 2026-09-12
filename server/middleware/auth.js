@@ -1,6 +1,7 @@
 import AuthService from '../services/AuthService.js';
 import { config } from '../config.js';
 
+
 export const COOKIE = 'henvix_sessao';
 
 /** Parser de cookie enxuto - evita mais uma dependencia so para ler um header. */
@@ -51,8 +52,12 @@ export function opcoesCookie(expira) {
   return {
     httpOnly: true,
     sameSite: 'lax',
-    // painel local roda em http://localhost: secure quebraria o cookie
-    secure: false,
+    /**
+     * Em localhost (http) o cookie precisa de secure=false, senao o navegador
+     * descarta. Publicado atras de HTTPS, ligue COOKIE_SEGURO=1 no .env para
+     * o cookie nunca trafegar em conexao aberta.
+     */
+    secure: config.auth.cookieSeguro,
     path: '/',
     expires: expira ? new Date(expira) : undefined
   };
