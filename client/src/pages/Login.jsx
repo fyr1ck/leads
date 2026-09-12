@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { LogIn, KeyRound, ShieldCheck, AlertTriangle, Mail, ArrowRight } from 'lucide-react';
+import { LogIn, KeyRound, AlertTriangle, Mail, ArrowRight } from 'lucide-react';
 import { api } from '../lib/api.js';
 import { Campo } from '../components/ui.jsx';
 
@@ -19,11 +19,8 @@ export default function Login({ onEntrou }) {
   useEffect(() => {
     api
       .get('/auth/sessao')
-      .then((s) => {
-        setEstado(s);
-        if (s.usuarios?.length === 1) setEmail(s.usuarios[0].email);
-      })
-      .catch(() => setEstado({ usuarios: [], minimoSenha: 8 }));
+      .then(setEstado)
+      .catch(() => setEstado({ minimoSenha: 8 }));
   }, []);
 
   const continuar = async (e) => {
@@ -111,23 +108,6 @@ export default function Login({ onEntrou }) {
               </div>
             </Campo>
 
-            {estado?.usuarios?.length > 0 && (
-              <div className="row gap-6 wrap">
-                {estado.usuarios.map((u) => (
-                  <button
-                    key={u.email}
-                    type="button"
-                    className="chip"
-                    style={{ cursor: 'pointer' }}
-                    onClick={() => setEmail(u.email)}
-                  >
-                    {u.email}
-                    {u.precisaDefinirSenha && <span className="dim">· criar senha</span>}
-                  </button>
-                ))}
-              </div>
-            )}
-
             {erro && (
               <div className="chip erro" style={{ height: 'auto', padding: '9px 12px', whiteSpace: 'normal' }}>
                 <AlertTriangle size={14} /> {erro}
@@ -214,12 +194,6 @@ export default function Login({ onEntrou }) {
           </form>
         )}
 
-        <div className="aviso-regra" style={{ marginTop: 22 }}>
-          <ShieldCheck size={16} />
-          <span className="fs-12">
-            Painel local. A senha é guardada com scrypt + salt, e a sessão fica num cookie httpOnly deste navegador.
-          </span>
-        </div>
       </div>
     </div>
   );

@@ -539,3 +539,72 @@ Rodando sem argumento, ele lista os usuários e a situação de cada um.
 
 Para tirar ou adicionar alguém, edite `USUARIOS_PERMITIDOS` e reinicie: quem sai
 da lista perde o acesso e tem as sessões encerradas na hora.
+
+---
+
+## 24. Deixar a automação ligada 24/7
+
+### O jeito mais simples: o próprio computador
+
+Já tem tudo pronto em `scripts/`:
+
+```
+scripts\henvix.bat                    inicia o painel e reinicia sozinho se cair
+scripts\instalar-inicializacao.bat    faz o painel subir junto com o Windows
+```
+
+Clique duas vezes em `henvix.bat` e o painel fica em **http://localhost:3000**
+(nesse modo o backend serve o painel — uma porta só). Se o processo morrer por
+qualquer motivo, ele volta em 10 segundos. O log fica em `data/servico.log`.
+
+Para iniciar junto com o Windows, rode `instalar-inicializacao.bat` **como
+administrador**. Para desfazer:
+
+```bash
+schtasks /Delete /TN "Henvix Sales OS" /F
+```
+
+Custo zero, mas depende do computador ligado e com internet.
+
+### ⚠️ Por que Vercel não funciona para este projeto
+
+O Vercel é *serverless*: cada requisição sobe uma função que vive segundos e
+morre. Este sistema precisa do contrário — um processo **vivo o tempo todo**:
+
+| O que o sistema faz | Por que não roda no Vercel |
+| --- | --- |
+| Sessão do WhatsApp (Baileys) | É um WebSocket aberto 24/7. A função morre em segundos e a sessão cai. |
+| Campanha com delay de 30–90s | O envio se arrasta por horas. Nenhuma função serverless vive tanto. |
+| Socket.IO (tempo real) | Precisa de servidor persistente; função serverless não mantém conexão. |
+| `data/wa-session` | O disco do Vercel é efêmero: a cada deploy você perderia a sessão e teria que ler o QR de novo. |
+| Banco em arquivo | Mesma coisa: sem disco persistente. |
+
+Não é limitação do código — é incompatibilidade de arquitetura. Qualquer painel
+de automação de WhatsApp precisa de um servidor que fica de pé.
+
+**Supabase** (Postgres gerenciado) é uma escolha boa *de banco*, mas sozinho não
+resolve: o problema é onde o **processo** roda, não onde os dados ficam. E hoje
+o projeto usa SQLite com SQL específico dele (`datetime('now')`, `julianday`,
+índices parciais) — migrar para Postgres é um trabalho à parte.
+
+### O caminho certo para 24/7 sem depender do PC
+
+Uma **VPS** rodando exatamente o mesmo `npm start`, com disco persistente:
+
+| Onde | Preço aproximado | Observação |
+| --- | --- | --- |
+| Railway | a partir de US$ 5/mês | deploy direto do GitHub, volume persistente |
+| Render | a partir de US$ 7/mês | precisa ativar *Persistent Disk* para `data/` |
+| Fly.io | a partir de US$ 5/mês | volume persistente, bom para processo único |
+| Hetzner / Contabo / DigitalOcean | US$ 4–6/mês | VPS pura: mais controle, um pouco mais de setup |
+
+O que muda no deploy:
+
+1. `data/` precisa ser um **volume persistente** (senão perde a sessão do
+   WhatsApp e o banco a cada deploy);
+2. as variáveis do `.env` vão como *environment variables* do serviço;
+3. o QR Code é lido uma vez pelo painel já hospedado;
+4. **troque a senha** e use `EXIGIR_LOGIN=1` — exposto na internet, o login
+   deixa de ser conforto e vira a única barreira;
+5. rode **uma instância só**. Duas brigam pela mesma sessão do WhatsApp
+   (erro 440) e derrubam uma à outra.

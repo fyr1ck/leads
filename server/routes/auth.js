@@ -7,15 +7,21 @@ import { config } from '../config.js';
 
 const router = Router();
 
-/** Quem esta logado + situacao dos usuarios (usado pela tela de login). */
+/**
+ * Quem esta logado.
+ * Para quem NAO esta logado devolve o minimo: quais e-mails tem acesso e
+ * quantos usuarios existem sao informacao que ajuda quem tenta invadir.
+ */
 router.get('/sessao', (req, res) => {
-  res.json({
+  const base = {
     logado: Boolean(req.usuario),
     usuario: req.usuario || null,
     exigirLogin: config.auth.exigirLogin,
     local: ehLocal(req),
-    ...AuthService.estado()
-  });
+    minimoSenha: AuthService.estado().minimoSenha
+  };
+  if (!req.usuario) return res.json(base);
+  return res.json({ ...base, ...AuthService.estado() });
 });
 
 /** Consulta se o e-mail tem acesso e se ja tem senha. */
