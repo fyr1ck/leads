@@ -110,6 +110,8 @@ export function migrar() {
     search_id: 'INTEGER',
     descoberto_em: 'TEXT'
   });
+  // id da etiqueta correspondente no WhatsApp Business (sincronizacao)
+  garantirColunas('tags', { wa_label_id: 'TEXT', wa_cor: 'INTEGER' });
   garantirColunas('campaigns', {
     descricao: 'TEXT',
     nicho: 'TEXT',

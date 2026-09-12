@@ -42,7 +42,36 @@ export class BaileysProvider extends EventEmitter {
     this.encerrandoManual = false;
     this.iniciando = false;
     this.tentativas = 0;
+    // Etiquetas do WhatsApp Business conhecidas nesta sessao (id -> {id, nome, cor})
+    this.etiquetas = new Map();
+    this.suportaEtiquetas = true;
     this.logger = pino({ level: process.env.BAILEYS_LOG || 'silent' });
+  }
+
+  listarEtiquetas() {
+    return [...this.etiquetas.values()];
+  }
+
+  /**
+   * Cria ou renomeia uma etiqueta no WhatsApp (recurso do WhatsApp Business).
+   * Vai como app-state patch, entao aparece no celular tambem.
+   */
+  async criarEtiqueta({ id, nome, cor = 0 }) {
+    if (!this.sock || this.status !== 'CONECTADO') throw new Error('WhatsApp not connected');
+    const meuJid = this.sock.user?.id;
+    await this.sock.addLabel(meuJid, { id: String(id), name: nome, color: Number(cor) || 0, deleted: false });
+    this.etiquetas.set(String(id), { id: String(id), nome, cor });
+    return { id: String(id), nome, cor };
+  }
+
+  async aplicarEtiquetaNoChat(jid, labelId) {
+    if (!this.sock || this.status !== 'CONECTADO') throw new Error('WhatsApp not connected');
+    await this.sock.addChatLabel(jid, String(labelId));
+  }
+
+  async removerEtiquetaDoChat(jid, labelId) {
+    if (!this.sock || this.status !== 'CONECTADO') throw new Error('WhatsApp not connected');
+    await this.sock.removeChatLabel(jid, String(labelId));
   }
 
   _status(status, extra = {}) {
@@ -82,6 +111,14 @@ export class BaileysProvider extends EventEmitter {
       this.sock.ev.on('creds.update', saveCreds);
       this.sock.ev.on('connection.update', (u) => this._onConnectionUpdate(u));
       this.sock.ev.on('messages.upsert', (u) => this._onMessages(u));
+
+      // Etiquetas que ja existem no aparelho chegam pelo app-state.
+      this.sock.ev.on('labels.edit', (label) => {
+        if (!label?.id) return;
+        if (label.deleted) this.etiquetas.delete(String(label.id));
+        else this.etiquetas.set(String(label.id), { id: String(label.id), nome: label.name, cor: label.color });
+        this.emit('etiquetas', this.listarEtiquetas());
+      });
     } catch (err) {
       logger.erro('whatsapp', `Falha ao iniciar sessao: ${err.message}`);
       this._status('DESCONECTADO', { motivo: err.message });
@@ -128,6 +165,27 @@ export class BaileysProvider extends EventEmitter {
 
       if (this.encerrandoManual) {
         this._status('DESCONECTADO', { motivo: 'Desconectado pelo painel.' });
+        return;
+      }
+
+      // 440 = a sessao foi assumida por outra instancia. Reconectar aqui cria
+      // um cabo de guerra: as duas se derrubam em looping. Melhor parar e avisar.
+      if (codigo === DisconnectReason.connectionReplaced) {
+        this.sock = null;
+        this._status('DESCONECTADO', {
+          motivo: 'Outra instancia do painel assumiu esta sessao do WhatsApp. Feche a outra janela/servidor e clique em Conectar.'
+        });
+        logger.erro(
+          'whatsapp',
+          'Sessao assumida por outra instancia (440). Rode apenas UM servidor por vez - reconectar aqui criaria um looping.'
+        );
+        return;
+      }
+
+      // 515 = o WhatsApp pede restart do socket logo apos o pareamento.
+      if (codigo === DisconnectReason.restartRequired) {
+        logger.info('whatsapp', 'O WhatsApp pediu para reiniciar a conexao. Reabrindo...');
+        setTimeout(() => this.iniciar().catch(() => {}), 500);
         return;
       }
 

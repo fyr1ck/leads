@@ -114,6 +114,24 @@ async function banner() {
   );
 }
 
+/**
+ * Porta ocupada quase sempre significa "o painel ja esta rodando".
+ * Sem isso o processo continuava vivo sem servir nada - e, pior, abria uma
+ * segunda sessao do WhatsApp que brigava com a primeira (erro 440).
+ */
+server.on('error', (err) => {
+  if (err.code === 'EADDRINUSE') {
+    console.error(
+      `\n\x1b[31m✖ A porta ${config.port} ja esta em uso.\x1b[0m\n` +
+        '  O painel provavelmente ja esta rodando em outra janela.\n' +
+        `  Abra http://localhost:${config.webPort} ou feche o outro servidor antes de subir de novo.\n`
+    );
+    process.exit(1);
+  }
+  logger.erro('servidor', `Erro no servidor HTTP: ${err.message}`);
+  process.exit(1);
+});
+
 server.listen(config.port, async () => {
   carregarSkill({ forcar: true });
   logger.ok('servidor', `API local ouvindo em http://localhost:${config.port}`);

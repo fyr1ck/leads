@@ -9,6 +9,7 @@ import * as settingsRepo from '../repositories/settingsRepo.js';
 import ActivityService from './ActivityService.js';
 import ScoreService from './ScoreService.js';
 import FollowUpService from './FollowUpService.js';
+import LabelService from './whatsapp/LabelService.js';
 import { bus, EVENTOS } from '../realtime/bus.js';
 import { logger } from '../utils/logger.js';
 import { normalizarTelefone, formatarTelefone } from '../utils/phone.js';
@@ -88,6 +89,7 @@ async function processar(msg) {
     bus.emit(EVENTOS.MENSAGEM_RECEBIDA, { lead: atualizado, mensagem: registrada });
     bus.emit(EVENTOS.LEAD_ATUALIZADO, { lead: atualizado });
 
+    const etiquetaAnterior = atualizado.etiqueta;
     const cfg = settingsRepo.obterTodas();
     if (!cfg.ia_analise_automatica) {
       bus.emit(EVENTOS.STATS, {});
@@ -137,6 +139,10 @@ async function processar(msg) {
     } catch {
       /* etiqueta personalizada removida: segue sem vincular */
     }
+
+    // Espelha a etiqueta na conversa do WhatsApp (WhatsApp Business).
+    // Falha aqui nao pode atrapalhar a analise, entao e sempre best-effort.
+    LabelService.aplicarNoLead(atualizado, analise.etiqueta, etiquetaAnterior).catch(() => {});
 
     historyRepo.registrar({
       lead: atualizado,

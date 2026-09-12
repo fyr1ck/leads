@@ -9,6 +9,7 @@ import * as analysisRepo from '../repositories/analysisRepo.js';
 import * as tagRepo from '../repositories/tagRepo.js';
 import ImportService from '../services/ImportService.js';
 import MessageService from '../services/MessageService.js';
+import LabelService from '../services/whatsapp/LabelService.js';
 import { asyncHandler } from '../middleware/index.js';
 import { AppError, naoEncontrado } from '../utils/errors.js';
 import { formatarTelefone } from '../utils/phone.js';
@@ -146,6 +147,7 @@ router.post('/:id/etiqueta', (req, res) => {
   const slug = String(req.body?.etiqueta || '').trim();
   const tag = tagRepo.porSlug(slug);
   if (!tag) throw new AppError('Etiqueta invalida.');
+  const etiquetaAnterior = lead.etiqueta;
   const atualizado = leadRepo.aplicarAnalise(lead.id, {
     etiqueta: tag.slug,
     prioridade: tag.prioridade,
@@ -153,6 +155,8 @@ router.post('/:id/etiqueta', (req, res) => {
     pipeline: req.body?.pipeline || tag.pipeline
   });
   tagRepo.vincular(lead.id, tag.slug, 'OPERADOR');
+  // espelha no WhatsApp (best-effort: nunca derruba a troca de etiqueta aqui)
+  LabelService.aplicarNoLead(atualizado, tag.slug, etiquetaAnterior).catch(() => {});
   historyRepo.registrar({ lead: atualizado, tipo: 'ETIQUETA', status: tag.slug, etiqueta: tag.slug, resposta: 'Definida pelo operador.' });
   bus.emit(EVENTOS.LEAD_ATUALIZADO, { lead: atualizado });
   bus.emit(EVENTOS.STATS, {});

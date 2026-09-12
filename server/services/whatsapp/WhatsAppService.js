@@ -52,6 +52,8 @@ export class WhatsAppService extends EventEmitter {
     // Mensagens recebidas sao apenas repassadas. Quem decide o que fazer e o
     // InboundHandler - e ele NUNCA responde (spec 15 / 50).
     this.provider.on('mensagem', (msg) => this.emit('mensagem', msg));
+
+    this.provider.on('etiquetas', (lista) => this.emit('etiquetas', lista));
   }
 
   estado() {
@@ -116,6 +118,37 @@ export class WhatsAppService extends EventEmitter {
 
   async existeNoWhatsApp(telefoneE164) {
     return this.provider.existeNoWhatsApp(telefoneE164);
+  }
+
+  /* ------------------------------------------------ etiquetas do WhatsApp */
+
+  /** O provider atual sabe mexer em etiqueta? (recurso do WhatsApp Business) */
+  get suportaEtiquetas() {
+    return Boolean(this.provider?.suportaEtiquetas && typeof this.provider.criarEtiqueta === 'function');
+  }
+
+  listarEtiquetasWhatsApp() {
+    return this.provider?.listarEtiquetas?.() || [];
+  }
+
+  async criarEtiqueta(dados) {
+    if (!this.suportaEtiquetas) throw new AppError('A biblioteca de WhatsApp em uso nao suporta etiquetas.', 501);
+    if (!this.conectado) throw new AppError('WhatsApp not connected', 409);
+    return this.provider.criarEtiqueta(dados);
+  }
+
+  async aplicarEtiquetaNoChat(telefoneE164, labelId) {
+    if (!this.suportaEtiquetas || !this.conectado) return false;
+    const jid = (await this.existeNoWhatsApp(telefoneE164)) || `${String(telefoneE164).replace(/\D/g, '')}@s.whatsapp.net`;
+    await this.provider.aplicarEtiquetaNoChat(jid, labelId);
+    return true;
+  }
+
+  async removerEtiquetaDoChat(telefoneE164, labelId) {
+    if (!this.suportaEtiquetas || !this.conectado) return false;
+    const jid = (await this.existeNoWhatsApp(telefoneE164)) || `${String(telefoneE164).replace(/\D/g, '')}@s.whatsapp.net`;
+    await this.provider.removerEtiquetaDoChat(jid, labelId);
+    return true;
   }
 }
 

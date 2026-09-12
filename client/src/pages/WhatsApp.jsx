@@ -4,6 +4,7 @@ import { api } from '../lib/api.js';
 import { useApp } from '../state/AppContext.jsx';
 import { Card, StatusDot } from '../components/ui.jsx';
 import LogConsole from '../components/LogConsole.jsx';
+import EtiquetasWhatsApp from '../components/EtiquetasWhatsApp.jsx';
 import { dataHora } from '../lib/format.js';
 
 const TEXTO_STATUS = {
@@ -125,6 +126,8 @@ export default function WhatsAppPage() {
             )}
           </div>
         </Card>
+
+        <EtiquetasWhatsApp />
 
         <Card titulo="Eventos da conexão" icone={<Info size={15} color="var(--accent)" />} bodyClass="tight">
           <LogConsole limite={16} />

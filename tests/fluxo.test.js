@@ -33,6 +33,7 @@ const settingsRepo = await import('../server/repositories/settingsRepo.js');
 const { default: whatsapp } = await import('../server/services/whatsapp/WhatsAppService.js');
 const { default: campaignRunner } = await import('../server/services/CampaignRunner.js');
 const { iniciarInbound } = await import('../server/services/InboundHandler.js');
+const { default: LabelService } = await import('../server/services/whatsapp/LabelService.js');
 const { classificarHeuristico } = await import('../server/services/ai/AIService.js');
 const { saudacaoDinamica } = await import('../server/utils/greeting.js');
 const { normalizarTelefone } = await import('../server/utils/phone.js');
@@ -47,6 +48,27 @@ class FakeProvider extends EventEmitter {
     this.pushName = 'Teste';
     this.enviadas = [];
     this.falharProximo = false;
+    // etiquetas do WhatsApp Business
+    this.suportaEtiquetas = true;
+    this.etiquetas = new Map();
+    this.chatsEtiquetados = new Map(); // jid -> Set(labelId)
+  }
+  listarEtiquetas() {
+    return [...this.etiquetas.values()];
+  }
+  async criarEtiqueta({ id, nome, cor }) {
+    this.etiquetas.set(String(id), { id: String(id), nome, cor });
+    return { id: String(id), nome, cor };
+  }
+  async aplicarEtiquetaNoChat(jid, labelId) {
+    if (!this.chatsEtiquetados.has(jid)) this.chatsEtiquetados.set(jid, new Set());
+    this.chatsEtiquetados.get(jid).add(String(labelId));
+  }
+  async removerEtiquetaDoChat(jid, labelId) {
+    this.chatsEtiquetados.get(jid)?.delete(String(labelId));
+  }
+  etiquetasDoChat(tel) {
+    return [...(this.chatsEtiquetados.get(`${tel}@s.whatsapp.net`) || [])];
   }
   async iniciar() {
     this.status = 'CONECTADO';
@@ -244,6 +266,50 @@ test('historico permanece mesmo depois de limpar a prospeccao', () => {
   assert.equal(depois, antes);
   const naProspeccao = all('SELECT COUNT(*) AS n FROM leads WHERE na_prospeccao = 1 AND quantidade_mensagens_enviadas > 0')[0].n;
   assert.equal(naProspeccao, 0);
+});
+
+test('etiquetas do CRM sao espelhadas no WhatsApp', async () => {
+  await whatsapp.conectar();
+
+  const r = await LabelService.sincronizar();
+  assert.ok(r.criadas >= 15, 'todas as etiquetas padrao devem ser criadas');
+  assert.equal(r.erros, 0);
+
+  // ids 1..5 sao as etiquetas pre-definidas do WhatsApp: nao podem ser usados
+  const ids = fake.listarEtiquetas().map((e) => Number(e.id));
+  assert.ok(Math.min(...ids) >= 6, 'nao pode sobrescrever as etiquetas padrao do WhatsApp');
+
+  const interessado = all("SELECT wa_label_id FROM tags WHERE slug = 'INTERESSADO'")[0];
+  assert.ok(interessado.wa_label_id, 'o id da etiqueta fica salvo no banco');
+
+  // aplicar no lead: entra a nova
+  const lead = all('SELECT * FROM leads WHERE telefone_e164 IS NOT NULL LIMIT 1')[0];
+  const aplicou = await LabelService.aplicarNoLead(lead, 'INTERESSADO');
+  assert.equal(aplicou.aplicada, true);
+  assert.deepEqual(fake.etiquetasDoChat(lead.telefone_e164), [interessado.wa_label_id]);
+
+  // trocar de etiqueta: a anterior sai, so a nova fica
+  const preco = all("SELECT wa_label_id FROM tags WHERE slug = 'QUER_SABER_PRECO'")[0];
+  await LabelService.aplicarNoLead(lead, 'QUER_SABER_PRECO', 'INTERESSADO');
+  assert.deepEqual(
+    fake.etiquetasDoChat(lead.telefone_e164),
+    [preco.wa_label_id],
+    'a etiqueta antiga precisa sair do chat'
+  );
+
+  // rodar de novo nao duplica nada
+  const segunda = await LabelService.sincronizar();
+  assert.equal(segunda.criadas, 0);
+  assert.equal(segunda.jaMapeadas, r.criadas + r.reaproveitadas);
+});
+
+test('etiquetar no WhatsApp nunca derruba o fluxo quando falha', async () => {
+  const lead = all('SELECT * FROM leads WHERE telefone_e164 IS NOT NULL LIMIT 1')[0];
+  await fake.encerrar(); // WhatsApp fora do ar
+
+  const r = await LabelService.aplicarNoLead(lead, 'INTERESSADO');
+  assert.equal(r.aplicada, false, 'sem conexao nao aplica');
+  assert.ok(r.motivo, 'e explica o porque, sem lancar excecao');
 });
 
 test('resposta automatica nao pode ser ligada nem pela API de settings', () => {
