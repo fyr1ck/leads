@@ -38,7 +38,14 @@ export function criarSocket(httpServer) {
     EVENTOS.LEAD_ATUALIZADO,
     EVENTOS.ANALISE_PRONTA,
     EVENTOS.IMPORTACAO,
-    EVENTOS.ALERTA
+    EVENTOS.ALERTA,
+    // v2 - Sales OS
+    EVENTOS.ATIVIDADE,
+    EVENTOS.NOTIFICACAO,
+    EVENTOS.BUSCA_PROGRESSO,
+    EVENTOS.FOLLOWUP,
+    EVENTOS.DEMO,
+    EVENTOS.VENDA
   ];
   for (const evento of repassar) bus.on(evento, (payload) => io.emit(evento, payload));
 

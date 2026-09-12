@@ -1,6 +1,6 @@
 # Henvix Sales Panel
 
-Painel local de prospecção, WhatsApp, CRM e IA da Henvix.
+Plataforma comercial local: prospecção + CRM + WhatsApp + IA + demonstrações + follow-up + campanhas + reativação + financeiro + analytics.
 
 Importa a planilha de leads, conecta o WhatsApp por QR Code, dispara a primeira
 mensagem personalizada com a Skill de Vendas da Henvix, **analisa** as respostas
@@ -28,6 +28,13 @@ leads/
 │   │   ├── MessageService.js     # ÚNICO ponto de envio do sistema
 │   │   ├── InboundHandler.js     # resposta recebida → análise → etiqueta (nunca responde)
 │   │   ├── CampaignRunner.js     # fila, delay aleatório, pausas, travas de segurança
+│   │   ├── prospect/             # Encontrar Leads: PlacesProvider + LeadFinderService
+│   │   ├── ScoreService.js       # score 0-100 com justificativa auditável
+│   │   ├── FollowUpService.js    # +1/+3/+7 dias: IA prepara, você confirma
+│   │   ├── DemoService.js        # demonstrações: criada → enviada → acessada
+│   │   ├── SalesService.js       # vendas, parcelas e recebimentos
+│   │   ├── ReactivationService.js# oportunidades que esfriaram
+│   │   ├── ActivityService.js    # timeline do lead + notificações
 │   │   ├── ImportService.js      # XLSX → leads (mapeamento + deduplicação)
 │   │   ├── ExportService.js      # leads restantes / histórico / CRM
 │   │   └── StatsService.js       # números do dashboard (sempre do banco real)
@@ -313,3 +320,183 @@ e por nome+endereço, enriquecimento sem duplicar, fila de campanha com envio e
 delay, bloqueio de reenvio para o mesmo telefone, pausa automática quando a
 conexão cai, preservação do histórico após limpar a prospecção e — o mais
 importante — que **uma resposta do cliente nunca gera envio automático**.
+
+---
+
+## 13. Encontrar Leads (busca automática)
+
+Menu **🔎 Encontrar Leads**: escolha nicho e cidade, e o sistema traz
+estabelecimentos reais da região — priorizando quem **não tem site próprio**.
+
+```
+Nicho: Barbearias   Cidade: Ribeirão Preto - SP   Raio: 10 km
+Filtro: ☑ Somente sem site
+```
+
+- **Fonte:** Google Places API (New), oficial. Não há scraping, bypass de
+  CAPTCHA, evasão de bloqueio nem leitura de área privada.
+- **Classificação do site:** 🟢 não identificado · 🟡 identificado · 🟠 verificar
+  manualmente. Instagram, Facebook e linktree **não contam como site próprio**;
+  agregadores (iFood, Doctoralia, marketplaces) caem em "verificar".
+- **Nada é inventado:** o que a fonte não devolve fica vazio.
+- **Seleção múltipla** com resumo (`18 adicionados · 2 duplicados · 0 erros`).
+- **Deduplicação em 5 níveis:** identificador da fonte → telefone → domínio do
+  site → Google Maps → nome + endereço. O card avisa quando o lead já está no
+  CRM, com status, score e último contato.
+- **Pesquisas salvas:** executar de novo, duplicar, excluir.
+- **Exportação XLSX** dos resultados — sempre um arquivo novo; a planilha
+  original de prospecção nunca é sobrescrita.
+
+Para ativar, no `.env`:
+
+```
+GOOGLE_MAPS_API_KEY=sua_chave
+```
+
+A chave precisa de **Places API (New)** e **Geocoding API** habilitadas no
+Google Cloud (é uma API paga, com cota gratuita mensal). Sem ela a página
+explica o passo a passo e o restante do painel funciona normalmente.
+
+---
+
+## 14. Score do lead (0–100)
+
+Cada ponto vem de um sinal real gravado no banco, com justificativa visível:
+
+```
+Score: 69/100
++35 Perguntou o preço
++15 Respondeu o contato
+ +5 Site próprio não identificado
+ +4 Manteve a conversa (2 mensagens)
+```
+
+Positivos: respondeu, pediu informações/preço/demonstração, acessou a demo, deu
+feedback, negociação, venda. Negativos: contatado sem resposta, recusou, demo
+enviada e não acessada, dias sem interação, sem telefone.
+
+A leitura da IA entra como **um** dos sinais (peso limitado), não como palavra
+final — dá para discordar com base em fato.
+
+Temperatura: 🔥 90–100 · 🟠 70–89 · 🟡 40–69 · 🔴 0–39.
+
+---
+
+## 15. Copiloto de vendas
+
+Dentro da conversa, o Copiloto lê o histórico **e a memória do lead** (demos
+enviadas/acessadas, feedbacks, análises anteriores, follow-ups, venda):
+
+```
+Resumo        Cliente pediu preço e quer discutir com sócio
+Intenção      obter preço
+Objeção       precisa ver com sócio
+Próxima ação  Enviar proposta detalhada com valores e opções
+Resposta sugerida   [ Copiar ]  [ Usar no campo ]     🛡 não enviada
+```
+
+Os botões só copiam ou preenchem o campo. O envio continua exigindo seu clique
+em **Enviar**.
+
+---
+
+## 16. Follow-up
+
+Sequência **+1, +3 e +7 dias**, agendada quando a prospecção envia a primeira
+mensagem (configurável em `followup_dias`).
+
+```
+IA prepara → você revisa → você confirma → envia
+```
+
+Status: `PENDENTE → PREPARADO → AGUARDANDO_CONFIRMACAO → ENVIADO` (ou
+`CANCELADO`). Quando o cliente responde, os follow-ups pendentes dele são
+cancelados sozinhos — ninguém recebe cobrança depois de responder.
+
+O Dashboard mostra **🔥 Próximas ações**: quem respondeu e não foi atendido,
+follow-ups vencidos e oportunidades quentes paradas há mais de 2 dias.
+
+---
+
+## 17. Demonstrações
+
+Pipeline próprio: **sem demo → criada → enviada → acessada → feedback →
+negociação → fechada**. A criação já vem preenchida com os dados do lead (nome,
+nicho, cidade, Maps, Instagram, telefone) — não existe segundo cadastro de
+estabelecimento.
+
+Cada evento alimenta o score e a timeline; demo acessada gera notificação.
+
+---
+
+## 18. Reativação
+
+Separa por grupo quem esfriou: interessados que pararam de responder, quem
+perguntou preço e sumiu, demonstrações sem desfecho, negociações paradas e
+contatados que nunca responderam.
+
+Você seleciona quem entra e o sistema monta uma **campanha de reativação**.
+Essa é a **única** exceção à trava de não repetir lead, e existe porque foi você
+quem escolheu cada um. Campanha comum continua ignorando quem já foi contatado
+— comportamento coberto por teste automatizado.
+
+---
+
+## 19. Vendas e financeiro
+
+Registrar a venda fecha o lead (status e etapa `FECHADO`), cria as parcelas e
+alimenta faturamento, recebido, pendente, ticket médio e número de vendas.
+Parcela prevista é **quitada**, não duplicada.
+
+---
+
+## 20. Timeline e notificações
+
+A ficha do lead mostra a linha do tempo completa:
+
+```
+🔎 Lead encontrado na busca      💬 Cliente respondeu
+📅 Lead importado da planilha    🔥 Score alterado para 82
+📤 Mensagem enviada              🌐 Demonstração criada
+🏷️ Etiqueta aplicada             🔗 Demonstração enviada
+⏰ Follow-up agendado            👀 Demonstração acessada
+💰 Venda registrada              💳 Pagamento registrado
+```
+
+O sino da barra superior guarda as notificações (lead quente, resposta, demo
+acessada, venda, leads adicionados) até você lê-las.
+
+---
+
+## 21. Skill Henvix editável
+
+Menu **📝 Skill Henvix**, em duas abas:
+
+- **Configuração comercial** — tom, serviços, **preços autorizados**, prazo,
+  formas de pagamento, objeções, argumentos, FAQ, abordagens, follow-up e regras
+  extras. Esse bloco entra no system prompt junto com a Skill.
+- **Arquivo da Skill** — edita o `.md` direto no painel, com backup automático
+  em `skills/backups/`.
+
+Campo de preços vazio = a IA **não fala valores**. Preenchido = ela cita
+exatamente aqueles, e nenhum outro.
+
+---
+
+## 22. Endpoints da v2
+
+| Método | Rota | Para quê |
+| --- | --- | --- |
+| GET | `/api/prospect/status` · `/nichos` | fonte de dados e catálogo de nichos |
+| POST | `/api/prospect/buscar` | busca por nicho + localização |
+| POST | `/api/prospect/adicionar` · `/adicionar-varios` | joga no CRM |
+| GET/POST/DELETE | `/api/prospect/pesquisas...` | pesquisas salvas |
+| GET | `/api/prospect/pesquisas/:id/export` | XLSX dos resultados |
+| GET/POST | `/api/followups` · `/proximas-acoes` · `/vencidos` | follow-up |
+| POST | `/api/followups/:id/preparar` · `/enviar` · `/cancelar` | IA prepara / você envia |
+| GET/POST | `/api/demos` · `/preparar/:leadId` · `/:id/enviada` · `/acesso` · `/feedback` | demonstrações |
+| GET/POST | `/api/sales` · `/:id/pagamentos` · `/pagamentos/:id/quitar` | vendas e parcelas |
+| GET/POST | `/api/reactivation` · `/campanha` | reativação |
+| GET/PUT | `/api/skill` | Skill + configuração comercial |
+| POST | `/api/ai/copiloto` | copiloto de vendas |
+| GET | `/api/activities` · `/notifications` · `/reports` | timeline, sino e relatórios |

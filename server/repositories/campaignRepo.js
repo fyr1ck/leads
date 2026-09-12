@@ -31,7 +31,10 @@ export const ativas = () => all("SELECT * FROM campaigns WHERE status IN ('ATIVA
 const COLUNAS = new Set([
   'nome', 'quantidade_alvo', 'status', 'delay_min', 'delay_max', 'bloco_tamanho',
   'bloco_pausa_minutos', 'filtros', 'enviados', 'erros', 'ignorados', 'ultimo_erro',
-  'motivo_parada', 'started_at', 'finished_at'
+  'motivo_parada', 'started_at', 'finished_at',
+  // v2 - Sales OS: sem 'tipo' aqui, a campanha de reativacao nasceria como
+  // prospeccao comum e o runner ignoraria os leads por duplicidade.
+  'tipo', 'descricao', 'nicho', 'localizacao'
 ]);
 
 export function atualizar(id, patch = {}) {

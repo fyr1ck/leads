@@ -1,7 +1,8 @@
 import { NavLink } from 'react-router-dom';
 import {
-  LayoutDashboard, Target, Users, Rocket, MessagesSquare, Flame, Clock, XCircle,
-  Megaphone, FileSpreadsheet, Smartphone, Settings, Database, Bot
+  LayoutDashboard, Search, Target, Users, MessagesSquare, Flame, Clock, XCircle,
+  Rocket, Megaphone, FileSpreadsheet, Smartphone, Settings, Database, Bot,
+  Globe, Recycle, Wallet, BarChart3, ScrollText, AlarmClock
 } from 'lucide-react';
 import { useApp } from '../state/AppContext.jsx';
 import { StatusDot } from './ui.jsx';
@@ -11,6 +12,7 @@ const GRUPOS = [
     titulo: 'Principal',
     itens: [
       { para: '/', rotulo: 'Dashboard', icone: LayoutDashboard, exato: true },
+      { para: '/encontrar-leads', rotulo: 'Encontrar Leads', icone: Search },
       { para: '/oportunidades', rotulo: 'Oportunidades', icone: Target, contador: 'quentes' }
     ]
   },
@@ -19,6 +21,8 @@ const GRUPOS = [
     itens: [
       { para: '/leads', rotulo: 'Leads', icone: Users },
       { para: '/conversas', rotulo: 'Conversas', icone: MessagesSquare, contador: 'naoLidas' },
+      { para: '/follow-ups', rotulo: 'Follow-ups', icone: AlarmClock, contador: 'acoes' },
+      { para: '/demonstracoes', rotulo: 'Demonstrações', icone: Globe },
       { para: '/interessados', rotulo: 'Interessados', icone: Flame },
       { para: '/aguardando', rotulo: 'Aguardando', icone: Clock },
       { para: '/nao-interessados', rotulo: 'Não interessados', icone: XCircle }
@@ -29,22 +33,35 @@ const GRUPOS = [
     itens: [
       { para: '/prospeccao', rotulo: 'Prospecção', icone: Rocket },
       { para: '/campanhas', rotulo: 'Campanhas', icone: Megaphone },
+      { para: '/reativacao', rotulo: 'Reativação', icone: Recycle },
       { para: '/importar', rotulo: 'Importar XLSX', icone: FileSpreadsheet }
+    ]
+  },
+  {
+    titulo: 'Negócio',
+    itens: [
+      { para: '/vendas', rotulo: 'Vendas / Financeiro', icone: Wallet },
+      { para: '/relatorios', rotulo: 'Relatórios', icone: BarChart3 }
     ]
   },
   {
     titulo: 'Sistema',
     itens: [
       { para: '/whatsapp', rotulo: 'WhatsApp', icone: Smartphone },
+      { para: '/skill', rotulo: 'Skill Henvix', icone: ScrollText },
       { para: '/configuracoes', rotulo: 'Configurações', icone: Settings }
     ]
   }
 ];
 
 export default function Sidebar({ aberta, onNavegar }) {
-  const { whatsapp, ia, naoLidas, oportunidades, conectadoSocket } = useApp();
+  const { whatsapp, ia, naoLidas, oportunidades, conectadoSocket, proximasAcoes } = useApp();
 
-  const contadores = { naoLidas, quentes: oportunidades?.quentes || 0 };
+  const contadores = {
+    naoLidas,
+    quentes: oportunidades?.quentes || 0,
+    acoes: (proximasAcoes || []).filter((a) => a.tipo === 'FOLLOWUP').length
+  };
   const estadoWa =
     whatsapp?.status === 'CONECTADO' ? 'ok' : whatsapp?.status === 'DESCONECTADO' ? 'erro' : 'warn';
 
@@ -54,7 +71,7 @@ export default function Sidebar({ aberta, onNavegar }) {
         <div className="brand-mark">H</div>
         <div className="brand-text">
           <strong>HENVIX</strong>
-          <span>Sales Panel</span>
+          <span>Sales OS</span>
         </div>
       </div>
 
@@ -76,7 +93,9 @@ export default function Sidebar({ aberta, onNavegar }) {
                   <Icone size={17} />
                   <span>{item.rotulo}</span>
                   {n > 0 && (
-                    <span className={`nav-count ${item.contador === 'quentes' ? 'quente' : ''}`}>{n > 99 ? '99+' : n}</span>
+                    <span className={`nav-count ${item.contador === 'quentes' ? 'quente' : ''}`}>
+                      {n > 99 ? '99+' : n}
+                    </span>
                   )}
                 </NavLink>
               );

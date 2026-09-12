@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
-  X, MessageSquare, CheckCheck, Clock3, Sparkles, Copy, Instagram, Globe, Phone, MapPin, Building2
+  X, MessageSquare, CheckCheck, Clock3, Sparkles, Copy, Instagram, Globe, Building2,
+  History, Globe2, AlarmClock, Wallet
 } from 'lucide-react';
 import { api } from '../lib/api.js';
 import { dataHora, tempoRelativo, rotuloPotencial, naoInformado } from '../lib/format.js';
@@ -13,23 +14,43 @@ import { Drawer, TagPill, Prioridade, Medidor, SkeletonLista, BotaoMaps, Vazio }
  * Mostra apenas o que existe de verdade no banco - campo sem dado fica "—".
  */
 export default function LeadDrawer({ leadId, aberto, onFechar, onAtualizado }) {
-  const { tags, toast } = useApp();
+  const { tags, toast, recarregarAcoes } = useApp();
   const [dados, setDados] = useState(null);
+  const [timeline, setTimeline] = useState([]);
   const [carregando, setCarregando] = useState(false);
+  const [ocupado, setOcupado] = useState(null);
 
   useEffect(() => {
     if (!aberto || !leadId) return;
     let vivo = true;
     setCarregando(true);
-    api
-      .get(`/leads/${leadId}`)
-      .then((d) => vivo && setDados(d))
+    Promise.all([api.get(`/leads/${leadId}`), api.get(`/activities?leadId=${leadId}&limite=60`)])
+      .then(([d, t]) => {
+        if (!vivo) return;
+        setDados(d);
+        setTimeline(t || []);
+      })
       .catch((e) => toast('erro', 'Não foi possível abrir o lead', e.message))
       .finally(() => vivo && setCarregando(false));
     return () => {
       vivo = false;
     };
   }, [leadId, aberto, toast]);
+
+  const agendarFollowUp = async () => {
+    setOcupado('followup');
+    try {
+      await api.post('/followups', { leadId, prazoDias: 1, motivo: 'Agendado manualmente pela ficha do lead.' });
+      const t = await api.get(`/activities?leadId=${leadId}&limite=60`);
+      setTimeline(t || []);
+      recarregarAcoes?.();
+      toast('sucesso', 'Follow-up agendado', 'Ele aparece em Follow-ups para você preparar e enviar.');
+    } catch (e) {
+      toast('erro', 'Erro ao agendar', e.message);
+    } finally {
+      setOcupado(null);
+    }
+  };
 
   const lead = dados?.lead;
 
@@ -229,38 +250,53 @@ export default function LeadDrawer({ leadId, aberto, onFechar, onAtualizado }) {
               </div>
             </section>
 
-            <div className="row gap-8 wrap">
-              <button type="button" className="btn btn-ok" onClick={fechar} disabled={lead.status === 'FECHADO'}>
-                <CheckCheck size={15} /> Marcar como fechado
-              </button>
-              <button type="button" className="btn" onClick={adiar}>
-                <Clock3 size={15} /> Adiar 24h
-              </button>
-            </div>
+            {/* -------------------------------------------------- acoes comerciais */}
+            <section className="col gap-8">
+              <span className="label">Ações</span>
+              <div className="row gap-8 wrap">
+                <Link className="btn btn-primary" to={`/demonstracoes?lead=${leadId}`}>
+                  <Globe2 size={15} /> Criar demonstração
+                </Link>
+                <button type="button" className="btn" onClick={agendarFollowUp} disabled={ocupado === 'followup'}>
+                  <AlarmClock size={15} /> {ocupado === 'followup' ? 'Agendando...' : 'Agendar follow-up'}
+                </button>
+                <Link className="btn" to="/vendas">
+                  <Wallet size={15} /> Registrar venda
+                </Link>
+              </div>
+              <div className="row gap-8 wrap">
+                <button type="button" className="btn btn-ok" onClick={fechar} disabled={lead.status === 'FECHADO'}>
+                  <CheckCheck size={15} /> Marcar como fechado
+                </button>
+                <button type="button" className="btn" onClick={adiar}>
+                  <Clock3 size={15} /> Adiar 24h
+                </button>
+              </div>
+            </section>
 
-            {/* -------------------------------------------------- historico */}
+            {/* -------------------------------------------------- timeline (spec 76) */}
             <section>
-              <div className="label" style={{ marginBottom: 8 }}>Histórico ({dados.historico.length})</div>
-              {dados.historico.length === 0 ? (
-                <Vazio titulo="Sem histórico ainda" texto="Assim que este lead for contatado, tudo aparece aqui." />
+              <div className="label row gap-6" style={{ marginBottom: 10 }}>
+                <History size={12} /> Linha do tempo ({timeline.length})
+              </div>
+              {timeline.length === 0 ? (
+                <Vazio titulo="Sem atividade ainda" texto="Tudo que acontecer com este lead fica registrado aqui." />
               ) : (
-                <div className="col gap-8">
-                  {dados.historico.slice(0, 14).map((h) => (
-                    <div key={h.id} className="kpi-mini">
-                      <div className="row-between">
-                        <span className="row gap-6 fs-12 bold">
-                          {h.tipo === 'ENVIO' && <Phone size={12} />}
-                          {h.tipo === 'RESPOSTA' && <MessageSquare size={12} />}
-                          {h.tipo === 'ETIQUETA' && <MapPin size={12} />}
-                          {h.tipo}
-                        </span>
-                        <span className="fs-12 dim">{tempoRelativo(h.created_at)}</span>
+                <div className="timeline">
+                  {timeline.slice(0, 30).map((a) => (
+                    <div className="timeline-item" key={a.id}>
+                      <span className="timeline-bolha">{a.icone || '•'}</span>
+                      <div className="grow" style={{ minWidth: 0 }}>
+                        <div className="row-between gap-8">
+                          <b className="fs-13">{a.titulo}</b>
+                          <span className="fs-12 dim nowrap">{tempoRelativo(a.created_at)}</span>
+                        </div>
+                        {a.descricao && (
+                          <p className="fs-12 muted" style={{ whiteSpace: 'pre-wrap' }}>
+                            {String(a.descricao).slice(0, 220)}
+                          </p>
+                        )}
                       </div>
-                      {(h.mensagem || h.resposta) && (
-                        <p className="fs-12 soft" style={{ whiteSpace: 'pre-wrap' }}>
-                          {(h.mensagem || h.resposta).slice(0, 260)}
-                        </p>
-                      )}
                     </div>
                   ))}
                 </div>

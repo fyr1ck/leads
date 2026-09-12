@@ -14,13 +14,20 @@ const PADROES = () => ({
   // REGRA DE OURO: fica 0 e o backend nao tem caminho para enviar resposta sozinho.
   ia_resposta_automatica: 0,
   remover_da_prospeccao_ao_contatar: 1,
-  quantidade_padrao_prospeccao: 50
+  quantidade_padrao_prospeccao: 50,
+  // v2 - Sales OS
+  followup_dias: '1,3,7',
+  followup_automatico: 1,
+  reativacao_dias: 15,
+  busca_raio_km: 10,
+  busca_somente_sem_site: 1
 });
 
 const CHAVES_NUMERICAS = new Set([
   'delay_min', 'delay_max', 'bloco_tamanho', 'bloco_pausa_minutos', 'limite_diario',
   'max_erros_consecutivos', 'ia_analise_automatica', 'ia_resposta_automatica',
-  'remover_da_prospeccao_ao_contatar', 'quantidade_padrao_prospeccao'
+  'remover_da_prospeccao_ao_contatar', 'quantidade_padrao_prospeccao',
+  'followup_automatico', 'reativacao_dias', 'busca_raio_km', 'busca_somente_sem_site'
 ]);
 
 const parse = (chave, valor) => {

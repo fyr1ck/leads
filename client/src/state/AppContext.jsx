@@ -17,6 +17,9 @@ export function AppProvider({ children }) {
   const [ia, setIa] = useState({ configurada: false, respostaAutomatica: false });
   const [naoLidas, setNaoLidas] = useState(0);
   const [oportunidades, setOportunidades] = useState({ quentes: 0, acompanhamento: 0, aguardando: 0, frios: 0 });
+  const [notificacoes, setNotificacoes] = useState([]);
+  const [notificacoesNaoLidas, setNotificacoesNaoLidas] = useState(0);
+  const [proximasAcoes, setProximasAcoes] = useState([]);
   const [toasts, setToasts] = useState([]);
   const [conectadoSocket, setConectadoSocket] = useState(socket.connected);
   const [ultimaResposta, setUltimaResposta] = useState(null);
@@ -32,18 +35,31 @@ export function AppProvider({ children }) {
 
   const recarregarBase = useCallback(async () => {
     try {
-      const [t, s, c, cont] = await Promise.all([
+      const [t, s, c, cont, n, acoes] = await Promise.all([
         api.get('/tags'),
         api.get('/settings'),
         api.get('/conversations'),
-        api.get('/opportunities/contadores')
+        api.get('/opportunities/contadores'),
+        api.get('/notifications?limite=30'),
+        api.get('/followups/proximas-acoes?limite=10')
       ]);
       setTags(t);
       setSettings(s);
       setNaoLidas(c.naoLidas || 0);
       setOportunidades(cont);
+      setNotificacoes(n.itens || []);
+      setNotificacoesNaoLidas(n.naoLidas || 0);
+      setProximasAcoes(acoes || []);
     } catch {
       /* backend ainda subindo: o socket avisa quando estiver pronto */
+    }
+  }, []);
+
+  const recarregarAcoes = useCallback(async () => {
+    try {
+      setProximasAcoes(await api.get('/followups/proximas-acoes?limite=10'));
+    } catch {
+      /* silencioso */
     }
   }, []);
 
@@ -97,6 +113,14 @@ export function AppProvider({ children }) {
       toast(mapa[tipo] || 'info', titulo, texto);
     };
 
+    const onNotificacao = (n) => {
+      setNotificacoes((lista) => [n, ...lista].slice(0, 40));
+      setNotificacoesNaoLidas((v) => v + 1);
+      recarregarAcoes();
+    };
+
+    const onMudouAlgo = () => recarregarAcoes();
+
     const onConectar = () => setConectadoSocket(true);
     const onDesconectar = () => setConectadoSocket(false);
 
@@ -112,6 +136,9 @@ export function AppProvider({ children }) {
     socket.on(EVENTOS.MENSAGEM_RECEBIDA, onResposta);
     socket.on(EVENTOS.ANALISE_PRONTA, onAnalise);
     socket.on(EVENTOS.ALERTA, onAlerta);
+    socket.on(EVENTOS.NOTIFICACAO, onNotificacao);
+    socket.on(EVENTOS.FOLLOWUP, onMudouAlgo);
+    socket.on(EVENTOS.DEMO, onMudouAlgo);
 
     return () => {
       socket.off('connect', onConectar);
@@ -126,8 +153,11 @@ export function AppProvider({ children }) {
       socket.off(EVENTOS.MENSAGEM_RECEBIDA, onResposta);
       socket.off(EVENTOS.ANALISE_PRONTA, onAnalise);
       socket.off(EVENTOS.ALERTA, onAlerta);
+      socket.off(EVENTOS.NOTIFICACAO, onNotificacao);
+      socket.off(EVENTOS.FOLLOWUP, onMudouAlgo);
+      socket.off(EVENTOS.DEMO, onMudouAlgo);
     };
-  }, [recarregarBase, toast]);
+  }, [recarregarBase, recarregarAcoes, toast]);
 
   const campanhaAtiva = useMemo(
     () => Object.values(campanhas).find((c) => c?.campanha?.status === 'ATIVA') || null,
@@ -154,12 +184,20 @@ export function AppProvider({ children }) {
       toasts,
       fecharToast,
       recarregarStats,
-      recarregarBase
+      recarregarBase,
+      // v2 - Sales OS
+      notificacoes,
+      notificacoesNaoLidas,
+      setNotificacoes,
+      setNotificacoesNaoLidas,
+      proximasAcoes,
+      recarregarAcoes
     }),
     [
       whatsapp, stats, logs, campanhas, campanhaAtiva, tags, settings, ia, naoLidas,
       oportunidades, ultimaResposta, conectadoSocket, toast, toasts, fecharToast,
-      recarregarStats, recarregarBase
+      recarregarStats, recarregarBase, notificacoes, notificacoesNaoLidas,
+      proximasAcoes, recarregarAcoes
     ]
   );
 

@@ -3,6 +3,7 @@ import * as leadRepo from '../repositories/leadRepo.js';
 import * as messageRepo from '../repositories/messageRepo.js';
 import * as historyRepo from '../repositories/historyRepo.js';
 import * as settingsRepo from '../repositories/settingsRepo.js';
+import ActivityService from './ActivityService.js';
 import { bus, EVENTOS } from '../realtime/bus.js';
 import { logger } from '../utils/logger.js';
 import { AppError, mensagemAmigavel } from '../utils/errors.js';
@@ -57,6 +58,18 @@ export const MessageService = {
         mensagem: corpo,
         status: 'ENVIADA',
         etiqueta: atualizado.etiqueta
+      });
+
+      // Primeiro contato move a etapa do funil (spec 74).
+      if (atualizado.pipeline === 'NOVO') {
+        leadRepo.atualizar(atualizado.id, { pipeline: 'CONTATADO' });
+      }
+
+      ActivityService.registrar({
+        lead_id: atualizado.id,
+        tipo: 'MENSAGEM_ENVIADA',
+        descricao: corpo.slice(0, 180),
+        meta: { autor, campanha: campanha?.nome || null, message_id: msg.id }
       });
 
       logger.ok('envio', `Mensagem enviada para ${atualizado.nome_estabelecimento}`);

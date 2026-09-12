@@ -1,5 +1,6 @@
 import ExcelJS from 'exceljs';
 import path from 'node:path';
+import { all, get } from '../db/index.js';
 import { paths } from '../config.js';
 import * as leadRepo from '../repositories/leadRepo.js';
 import * as historyRepo from '../repositories/historyRepo.js';
@@ -137,4 +138,59 @@ export async function exportarCrm() {
   return { arquivo: await salvar(wb, `crm-henvix-${stamp()}.xlsx`), total: leads.length };
 }
 
-export default { exportarRestantes, exportarHistorico, exportarCrm };
+/**
+ * Resultados de uma busca de leads (spec 59.11).
+ * Gera SEMPRE um arquivo novo: a planilha original de prospeccao nunca e tocada.
+ */
+export async function exportarResultadosBusca(searchId) {
+  const pesquisa = get('SELECT * FROM saved_searches WHERE id = ?', searchId);
+  const resultados = all('SELECT * FROM search_results WHERE search_id = ? ORDER BY id ASC', searchId);
+
+  const { wb, ws } = novaPlanilha('Resultados da busca', [
+    { header: 'Estabelecimento', key: 'nome', width: 38 },
+    { header: 'Nicho', key: 'nicho', width: 20 },
+    { header: 'Cidade', key: 'cidade', width: 20 },
+    { header: 'Estado', key: 'estado', width: 10 },
+    { header: 'Telefone', key: 'telefone', width: 20 },
+    { header: 'Google Maps', key: 'maps', width: 45 },
+    { header: 'Site', key: 'site', width: 30 },
+    { header: 'Instagram', key: 'instagram', width: 28 },
+    { header: 'Avaliacao', key: 'avaliacao', width: 12 },
+    { header: 'Qtd. avaliacoes', key: 'total_avaliacoes', width: 16 },
+    { header: 'Status do site', key: 'status_site', width: 22 },
+    { header: 'Prioridade', key: 'prioridade', width: 12 },
+    { header: 'Data da pesquisa', key: 'data', width: 20 },
+    { header: 'Origem', key: 'origem', width: 16 },
+    { header: 'Status do lead', key: 'status_lead', width: 16 },
+    { header: 'Score', key: 'score', width: 10 }
+  ]);
+
+  const ROTULOS = { SEM_SITE: 'Site nao identificado', COM_SITE: 'Site identificado', VERIFICAR: 'Verificar manualmente' };
+
+  for (const r of resultados) {
+    const lead = r.lead_id ? get('SELECT status, score FROM leads WHERE id = ?', r.lead_id) : null;
+    ws.addRow({
+      nome: r.nome,
+      nicho: r.nicho || '',
+      cidade: r.cidade || '',
+      estado: r.estado || '',
+      telefone: r.telefone_e164 ? formatarTelefone(r.telefone_e164) : r.telefone || '',
+      maps: r.google_maps || '',
+      site: r.site || 'Nao identificado',
+      instagram: r.instagram || '',
+      avaliacao: r.avaliacao ?? '',
+      total_avaliacoes: r.total_avaliacoes ?? '',
+      status_site: ROTULOS[r.status_site] || r.status_site || '',
+      prioridade: r.prioridade || '',
+      data: r.created_at,
+      origem: r.origem || 'google_places',
+      status_lead: lead?.status || (r.adicionado ? 'ADICIONADO' : 'NAO ADICIONADO'),
+      score: lead?.score ?? ''
+    });
+  }
+
+  const nome = `busca-${(pesquisa?.nicho || 'leads').toLowerCase()}-${stamp()}.xlsx`;
+  return { arquivo: await salvar(wb, nome), total: resultados.length };
+}
+
+export default { exportarRestantes, exportarHistorico, exportarCrm, exportarResultadosBusca };

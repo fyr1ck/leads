@@ -1,8 +1,12 @@
 import { all, get, run, pluck, tx } from '../db/index.js';
 import { normalizarTelefone, chaveComparacao } from '../utils/phone.js';
 import { rankPrioridade, TAGS_POR_SLUG, grupoOportunidade, faixaPotencial } from '../domain/classificacao.js';
+import { dominioDe } from '../domain/nichos.js';
 
-const CAMPOS_ENRIQUECIVEIS = ['google_maps', 'endereco', 'cidade', 'instagram', 'categoria', 'site', 'telefone'];
+const CAMPOS_ENRIQUECIVEIS = [
+  'google_maps', 'endereco', 'cidade', 'instagram', 'categoria', 'site', 'telefone',
+  'estado', 'nicho', 'place_id', 'avaliacao', 'total_avaliacoes', 'status_site'
+];
 
 const vazio = (v) => v === null || v === undefined || String(v).trim() === '';
 
@@ -43,6 +47,26 @@ export function porDedupeKey(key) {
   return get('SELECT * FROM leads WHERE dedupe_key = ?', key);
 }
 
+/** Identificador da fonte: o mais confiavel para deduplicar (spec 59.15). */
+export const porPlaceId = (placeId) =>
+  placeId ? get('SELECT * FROM leads WHERE place_id = ?', placeId) : null;
+
+/** Mesmo dominio de site = provavelmente a mesma empresa (spec 59.15). */
+export function porDominioSite(dominio) {
+  if (!dominio) return null;
+  return get(
+    `SELECT * FROM leads
+      WHERE site IS NOT NULL AND TRIM(site) <> ''
+        AND (site LIKE ? OR site LIKE ?)
+      LIMIT 1`,
+    `%//${dominio}%`,
+    `%//www.${dominio}%`
+  );
+}
+
+export const porGoogleMaps = (url) =>
+  url ? get('SELECT * FROM leads WHERE google_maps = ?', url) : null;
+
 /**
  * Cria o lead ou, se ele ja existir, apenas completa campos vazios.
  * Nunca cria um segundo lead para o mesmo telefone (spec 39).
@@ -52,7 +76,15 @@ export function criarOuEnriquecer(dados, origem = 'IMPORT_XLSX') {
   const e164 = normalizarTelefone(dados.telefone);
   const dedupe = montarDedupeKey(dados.nome_estabelecimento, dados.endereco, dados.cidade);
 
-  const existente = (e164 && porTelefone(e164)) || (!e164 && porDedupeKey(dedupe)) || null;
+  // Ordem de deduplicacao (spec 59.15):
+  // identificador da fonte -> telefone -> dominio do site -> Google Maps -> nome+endereco
+  const existente =
+    (dados.place_id && porPlaceId(dados.place_id)) ||
+    (e164 && porTelefone(e164)) ||
+    (dados.site && porDominioSite(dominioDe(dados.site))) ||
+    (dados.google_maps && porGoogleMaps(dados.google_maps)) ||
+    (!e164 && porDedupeKey(dedupe)) ||
+    null;
 
   if (existente) {
     const patch = {};
@@ -70,22 +102,32 @@ export function criarOuEnriquecer(dados, origem = 'IMPORT_XLSX') {
 
   const r = run(
     `INSERT INTO leads
-      (nome_estabelecimento, telefone, telefone_e164, google_maps, endereco, cidade,
-       instagram, categoria, site, origem, observacoes, dedupe_key, dados_extra, status, pipeline)
-     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?, 'NOVO', 'NOVOS')`,
+      (nome_estabelecimento, telefone, telefone_e164, google_maps, endereco, cidade, estado,
+       instagram, categoria, site, origem, observacoes, dedupe_key, dados_extra,
+       nicho, place_id, avaliacao, total_avaliacoes, status_site, search_id, descoberto_em,
+       status, pipeline)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?, 'NOVO', 'NOVO')`,
     String(dados.nome_estabelecimento || '').trim(),
     dados.telefone || null,
     e164,
     dados.google_maps || null,
     dados.endereco || null,
     dados.cidade || null,
+    dados.estado || null,
     dados.instagram || null,
     dados.categoria || null,
     dados.site || null,
     origem,
     dados.observacoes || null,
     dedupe,
-    dados.dados_extra ? JSON.stringify(dados.dados_extra) : null
+    dados.dados_extra ? JSON.stringify(dados.dados_extra) : null,
+    dados.nicho || null,
+    dados.place_id || null,
+    dados.avaliacao ?? null,
+    dados.total_avaliacoes ?? null,
+    dados.status_site || null,
+    dados.search_id || null,
+    dados.descoberto_em || null
   );
   return { acao: 'CRIADO', lead: porId(Number(r.lastInsertRowid)) };
 }
@@ -95,7 +137,10 @@ const COLUNAS_EDITAVEIS = new Set([
   'instagram', 'categoria', 'site', 'status', 'etiqueta', 'prioridade', 'score', 'pipeline',
   'data_ultimo_contato', 'quantidade_mensagens_enviadas', 'respondeu', 'ultima_mensagem',
   'ultima_mensagem_data', 'primeira_resposta_data', 'origem', 'observacoes', 'dedupe_key',
-  'na_prospeccao', 'adiado_ate', 'fechado_em', 'dados_extra'
+  'na_prospeccao', 'adiado_ate', 'fechado_em', 'dados_extra',
+  // v2 - Sales OS
+  'estado', 'nicho', 'place_id', 'avaliacao', 'total_avaliacoes', 'status_site',
+  'temperatura', 'score_motivos', 'proxima_acao', 'proximo_followup', 'search_id', 'descoberto_em'
 ]);
 
 export function atualizar(id, patch = {}) {

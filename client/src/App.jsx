@@ -15,6 +15,14 @@ import Campanhas from './pages/Campanhas.jsx';
 import Importar from './pages/Importar.jsx';
 import WhatsAppPage from './pages/WhatsApp.jsx';
 import Configuracoes from './pages/Configuracoes.jsx';
+// v2 - Sales OS
+import EncontrarLeads from './pages/EncontrarLeads.jsx';
+import FollowUps from './pages/FollowUps.jsx';
+import Demonstracoes from './pages/Demonstracoes.jsx';
+import Reativacao from './pages/Reativacao.jsx';
+import Vendas from './pages/Vendas.jsx';
+import Relatorios from './pages/Relatorios.jsx';
+import Skill from './pages/Skill.jsx';
 
 const TITULOS = {
   '/': { titulo: 'Dashboard', sub: null },
@@ -28,7 +36,15 @@ const TITULOS = {
   '/campanhas': { titulo: 'Campanhas', sub: 'Histórico e controle das prospecções' },
   '/importar': { titulo: 'Importar XLSX', sub: 'Leitura automática das colunas da planilha' },
   '/whatsapp': { titulo: 'WhatsApp', sub: 'Conexão por QR Code' },
-  '/configuracoes': { titulo: 'Configurações', sub: 'Delay, limites e comportamento da IA' }
+  '/configuracoes': { titulo: 'Configurações', sub: 'Delay, limites e comportamento da IA' },
+  // v2 - Sales OS
+  '/encontrar-leads': { titulo: '🔎 Encontrar Leads', sub: 'Nicho + localização — prioriza quem não tem site próprio' },
+  '/follow-ups': { titulo: 'Follow-ups', sub: 'A IA prepara, você revisa e decide o envio' },
+  '/demonstracoes': { titulo: 'Demonstrações', sub: 'Do modelo criado até o fechamento' },
+  '/reativacao': { titulo: '♻️ Reativação', sub: 'Oportunidades que esfriaram e continuam valendo' },
+  '/vendas': { titulo: 'Vendas / Financeiro', sub: 'Faturamento, recebimentos e pendências' },
+  '/relatorios': { titulo: 'Relatórios', sub: 'Funil, campanhas e conversão' },
+  '/skill': { titulo: 'Skill Henvix', sub: 'As regras comerciais que a IA segue' }
 };
 
 export default function App() {
@@ -71,6 +87,14 @@ export default function App() {
             <Route path="/importar" element={<Importar />} />
             <Route path="/whatsapp" element={<WhatsAppPage />} />
             <Route path="/configuracoes" element={<Configuracoes />} />
+            {/* v2 - Sales OS */}
+            <Route path="/encontrar-leads" element={<EncontrarLeads />} />
+            <Route path="/follow-ups" element={<FollowUps />} />
+            <Route path="/demonstracoes" element={<Demonstracoes />} />
+            <Route path="/reativacao" element={<Reativacao />} />
+            <Route path="/vendas" element={<Vendas />} />
+            <Route path="/relatorios" element={<Relatorios />} />
+            <Route path="/skill" element={<Skill />} />
             <Route path="*" element={<Dashboard />} />
           </Routes>
         </main>

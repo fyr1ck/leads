@@ -49,6 +49,11 @@ export const config = {
     deviceName: process.env.WA_DEVICE_NAME || 'Henvix Painel',
     sessionDir: paths.waSession
   },
+  // Fonte de dados publicos de estabelecimentos (spec 59.18: so API oficial).
+  places: {
+    apiKey: process.env.GOOGLE_MAPS_API_KEY || process.env.GOOGLE_PLACES_API_KEY || '',
+    maxResultados: num(process.env.PLACES_MAX_RESULTADOS, 60)
+  },
   operacao: {
     limiteDiario: num(process.env.LIMITE_DIARIO, 200),
     delayMin: num(process.env.DELAY_MIN, 30),

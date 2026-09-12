@@ -24,5 +24,12 @@ export const EVENTOS = {
   IMPORTACAO: 'importacao:concluida',
   ALERTA: 'alerta',
   STATS: 'stats:atualizado',
-  INICIAL: 'estado:inicial'
+  INICIAL: 'estado:inicial',
+  // v2 - Sales OS
+  ATIVIDADE: 'atividade:nova',
+  NOTIFICACAO: 'notificacao:nova',
+  BUSCA_PROGRESSO: 'busca:progresso',
+  FOLLOWUP: 'followup:atualizado',
+  DEMO: 'demo:atualizada',
+  VENDA: 'venda:registrada'
 };

@@ -7,6 +7,7 @@ import { api } from '../lib/api.js';
 import { useApp } from '../state/AppContext.jsx';
 import { socket, EVENTOS } from '../lib/socket.js';
 import { Card, TagPill, Prioridade, Medidor, Vazio, SkeletonLista, BotaoMaps } from '../components/ui.jsx';
+import Copiloto from '../components/Copiloto.jsx';
 import { hora, tempoRelativo, iniciais, rotuloPotencial, naoInformado, dataHora } from '../lib/format.js';
 
 export default function Conversas() {
@@ -202,6 +203,11 @@ export default function Conversas() {
                 </div>
               ))}
               <div ref={fimChat} />
+            </div>
+
+            {/* copiloto de vendas (spec 63) */}
+            <div style={{ margin: '0 12px 10px' }}>
+              <Copiloto leadId={lead.id} onUsarResposta={setTexto} />
             </div>
 
             {/* sugestao da IA - nunca enviada sozinha (spec 29) */}

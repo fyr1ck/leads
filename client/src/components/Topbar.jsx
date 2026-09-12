@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { Menu, Rocket, QrCode, Activity } from 'lucide-react';
 import { useApp } from '../state/AppContext.jsx';
 import { Progresso } from './ui.jsx';
+import Notificacoes from './Notificacoes.jsx';
 
 function saudacaoAgora() {
   const h = Number(
@@ -51,6 +52,8 @@ export default function Topbar({ titulo, subtitulo, onMenu, acoes }) {
       )}
 
       {acoes}
+
+      <Notificacoes />
 
       <Link to="/whatsapp" className={`chip ${estado}`} style={{ textDecoration: 'none' }}>
         <span className={`status-dot ${estado}`} />

@@ -199,3 +199,158 @@ CREATE TABLE IF NOT EXISTS imports (
   mapeamento     TEXT,
   created_at     TEXT NOT NULL DEFAULT (datetime('now'))
 );
+
+-- ============================================================
+--  v2 - Sales OS: prospeccao, demos, follow-up, vendas, timeline
+--  Tudo aditivo: nenhuma tabela acima e alterada ou removida.
+-- ============================================================
+
+-- Nichos usados na busca de leads (os personalizados ficam salvos) - spec 59.1
+CREATE TABLE IF NOT EXISTS niches (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  nome       TEXT NOT NULL,
+  slug       TEXT NOT NULL UNIQUE,
+  termo      TEXT,              -- termo enviado para a fonte de dados
+  sistema    INTEGER NOT NULL DEFAULT 0,
+  buscas     INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- Pesquisas salvas - spec 59.14
+CREATE TABLE IF NOT EXISTS saved_searches (
+  id               INTEGER PRIMARY KEY AUTOINCREMENT,
+  nome             TEXT NOT NULL,
+  nicho            TEXT NOT NULL,
+  cidade           TEXT,
+  estado           TEXT,
+  raio_km          INTEGER NOT NULL DEFAULT 10,
+  filtros          TEXT,
+  total_encontrados INTEGER NOT NULL DEFAULT 0,
+  total_adicionados INTEGER NOT NULL DEFAULT 0,
+  execucoes        INTEGER NOT NULL DEFAULT 0,
+  ultima_execucao  TEXT,
+  created_at       TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- Resultado bruto de cada busca - spec 59.6 / 59.12
+CREATE TABLE IF NOT EXISTS search_results (
+  id               INTEGER PRIMARY KEY AUTOINCREMENT,
+  search_id        INTEGER REFERENCES saved_searches(id) ON DELETE SET NULL,
+  place_id         TEXT,
+  nome             TEXT NOT NULL,
+  categoria        TEXT,
+  endereco         TEXT,
+  cidade           TEXT,
+  estado           TEXT,
+  telefone         TEXT,
+  telefone_e164    TEXT,
+  google_maps      TEXT,
+  site             TEXT,
+  instagram        TEXT,
+  avaliacao        REAL,
+  total_avaliacoes INTEGER,
+  status_site      TEXT,        -- SEM_SITE | COM_SITE | VERIFICAR
+  prioridade       TEXT,        -- ALTA | MEDIA | BAIXA (priorizacao interna)
+  nicho            TEXT,
+  origem           TEXT,        -- google_places
+  lead_id          INTEGER REFERENCES leads(id) ON DELETE SET NULL,
+  adicionado       INTEGER NOT NULL DEFAULT 0,
+  bruto            TEXT,
+  created_at       TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS ix_sr_busca ON search_results(search_id, created_at);
+CREATE INDEX IF NOT EXISTS ix_sr_place ON search_results(place_id);
+
+-- Follow-ups - spec 66
+CREATE TABLE IF NOT EXISTS follow_ups (
+  id             INTEGER PRIMARY KEY AUTOINCREMENT,
+  lead_id        INTEGER NOT NULL REFERENCES leads(id) ON DELETE CASCADE,
+  campaign_id    INTEGER REFERENCES campaigns(id) ON DELETE SET NULL,
+  prazo_dias     INTEGER NOT NULL DEFAULT 1,
+  agendado_para  TEXT NOT NULL,
+  status         TEXT NOT NULL DEFAULT 'PENDENTE', -- PENDENTE|PREPARADO|AGUARDANDO_CONFIRMACAO|ENVIADO|CANCELADO
+  mensagem       TEXT,
+  origem         TEXT,          -- AUTOMATICO | OPERADOR
+  motivo         TEXT,
+  enviado_em     TEXT,
+  cancelado_em   TEXT,
+  created_at     TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at     TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS ix_fu_lead ON follow_ups(lead_id, status);
+CREATE INDEX IF NOT EXISTS ix_fu_prazo ON follow_ups(status, agendado_para);
+
+-- Demonstracoes - spec 68
+CREATE TABLE IF NOT EXISTS demos (
+  id             INTEGER PRIMARY KEY AUTOINCREMENT,
+  lead_id        INTEGER NOT NULL REFERENCES leads(id) ON DELETE CASCADE,
+  titulo         TEXT,
+  url            TEXT,
+  status         TEXT NOT NULL DEFAULT 'CRIADA', -- CRIADA|ENVIADA|ACESSADA|FEEDBACK|NEGOCIACAO|FECHADA|DESCARTADA
+  acessos        INTEGER NOT NULL DEFAULT 0,
+  criada_em      TEXT NOT NULL DEFAULT (datetime('now')),
+  enviada_em     TEXT,
+  primeiro_acesso TEXT,
+  ultimo_acesso  TEXT,
+  feedback       TEXT,
+  observacoes    TEXT,
+  updated_at     TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS ix_demo_lead ON demos(lead_id, status);
+
+-- Vendas e pagamentos - spec 71
+CREATE TABLE IF NOT EXISTS sales (
+  id             INTEGER PRIMARY KEY AUTOINCREMENT,
+  lead_id        INTEGER NOT NULL REFERENCES leads(id) ON DELETE CASCADE,
+  demo_id        INTEGER REFERENCES demos(id) ON DELETE SET NULL,
+  campaign_id    INTEGER REFERENCES campaigns(id) ON DELETE SET NULL,
+  descricao      TEXT,
+  valor          REAL NOT NULL DEFAULT 0,
+  forma_pagamento TEXT,
+  status         TEXT NOT NULL DEFAULT 'PENDENTE', -- PENDENTE|PARCIAL|PAGO|ATRASADO|CANCELADO
+  data_venda     TEXT NOT NULL DEFAULT (datetime('now')),
+  observacoes    TEXT,
+  created_at     TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at     TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS ix_sale_lead ON sales(lead_id);
+
+CREATE TABLE IF NOT EXISTS payments (
+  id             INTEGER PRIMARY KEY AUTOINCREMENT,
+  sale_id        INTEGER NOT NULL REFERENCES sales(id) ON DELETE CASCADE,
+  valor          REAL NOT NULL DEFAULT 0,
+  data_prevista  TEXT,
+  data_pagamento TEXT,
+  status         TEXT NOT NULL DEFAULT 'PENDENTE', -- PENDENTE|PAGO|ATRASADO|CANCELADO
+  forma          TEXT,
+  observacoes    TEXT,
+  created_at     TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS ix_pay_sale ON payments(sale_id, status);
+
+-- Timeline unificada do lead - spec 76
+CREATE TABLE IF NOT EXISTS activities (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  lead_id     INTEGER REFERENCES leads(id) ON DELETE CASCADE,
+  tipo        TEXT NOT NULL,
+  titulo      TEXT NOT NULL,
+  descricao   TEXT,
+  icone       TEXT,
+  meta        TEXT,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS ix_act_lead ON activities(lead_id, created_at);
+CREATE INDEX IF NOT EXISTS ix_act_tipo ON activities(tipo, created_at);
+
+-- Central de notificacoes - spec 75
+CREATE TABLE IF NOT EXISTS notifications (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  tipo        TEXT NOT NULL,
+  titulo      TEXT NOT NULL,
+  texto       TEXT,
+  lead_id     INTEGER REFERENCES leads(id) ON DELETE CASCADE,
+  rota        TEXT,
+  lida        INTEGER NOT NULL DEFAULT 0,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS ix_notif_lida ON notifications(lida, created_at);

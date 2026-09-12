@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
-  Users, Send, MessageSquare, Flame, Clock, ThumbsDown, Handshake, Trophy,
+  Users, Send, MessageSquare, Flame, Handshake, Trophy, Globe, Wallet,
   Target, ArrowRight, Activity, MapPin, Tag as TagIcon
 } from 'lucide-react';
 import { api } from '../lib/api.js';
@@ -9,6 +9,7 @@ import { useApp } from '../state/AppContext.jsx';
 import { Card, StatCard, TagPill, Vazio, SkeletonLista, Medidor } from '../components/ui.jsx';
 import { GraficoLinha, GraficoBarras, GraficoRosca } from '../components/charts.jsx';
 import LogConsole from '../components/LogConsole.jsx';
+import ProximasAcoes from '../components/ProximasAcoes.jsx';
 import { numero, porcento, tempoRelativo, rotuloPotencial } from '../lib/format.js';
 
 export default function Dashboard() {
@@ -38,23 +39,62 @@ export default function Dashboard() {
   const o = stats?.operacao || {};
   const taxas = stats?.taxas || {};
 
+  const dinheiro = (v) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(v || 0));
+
   const cards = [
-    { rotulo: 'Leads importados', valor: c.leads_importados, icone: <Users size={17} />, cor: '', rodape: `${numero(o.disponiveis || 0)} disponíveis para chamar` },
-    { rotulo: 'Leads contatados', valor: c.leads_contatados, icone: <Send size={17} />, cor: 'ok', rodape: `${numero(o.enviadas_hoje || 0)} enviadas hoje` },
-    { rotulo: 'Responderam', valor: c.responderam, icone: <MessageSquare size={17} />, cor: 'roxo', rodape: `taxa de resposta ${porcento(taxas.resposta)}` },
+    { rotulo: 'Leads', valor: c.leads_importados, icone: <Users size={17} />, cor: '', rodape: `${numero(o.disponiveis || 0)} disponíveis para chamar` },
+    { rotulo: 'Contatos', valor: c.leads_contatados, icone: <Send size={17} />, cor: 'ok', rodape: `${numero(o.enviadas_hoje || 0)} enviadas hoje` },
+    { rotulo: 'Respostas', valor: c.responderam, icone: <MessageSquare size={17} />, cor: 'roxo', rodape: `taxa de resposta ${porcento(taxas.resposta)}` },
     { rotulo: 'Interessados', valor: c.interessados, icone: <Flame size={17} />, cor: 'laranja', rodape: `taxa de interesse ${porcento(taxas.interesse)}` },
-    { rotulo: 'Aguardando', valor: c.aguardando, icone: <Clock size={17} />, cor: 'warn', rodape: 'em acompanhamento' },
-    { rotulo: 'Não interessados', valor: c.nao_interessados, icone: <ThumbsDown size={17} />, cor: 'erro', rodape: 'histórico preservado' },
+    { rotulo: 'Demonstrações', valor: c.demos, icone: <Globe size={17} />, cor: '', rodape: `${numero(c.demos_acessadas || 0)} acessada(s)` },
     { rotulo: 'Negociações', valor: c.negociacoes, icone: <Handshake size={17} />, cor: 'roxo', rodape: 'em negociação agora' },
-    { rotulo: 'Conversões', valor: c.conversoes, icone: <Trophy size={17} />, cor: 'ok', rodape: `conversão ${porcento(taxas.conversao)}` }
+    { rotulo: 'Clientes', valor: c.conversoes, icone: <Trophy size={17} />, cor: 'ok', rodape: `conversão ${porcento(taxas.conversao)}` },
+    { rotulo: 'Faturamento', valor: c.faturamento, icone: <Wallet size={17} />, cor: 'ok', rodape: dinheiro(c.faturamento), dinheiro: true }
   ];
 
   return (
     <>
       <div className="grid grid-4 stagger">
-        {cards.map((card, i) => (
-          <StatCard key={card.rotulo} {...card} i={i} />
-        ))}
+        {cards.map((card, i) =>
+          card.dinheiro ? (
+            <article className="stat" key={card.rotulo} style={{ '--i': i }}>
+              <div className="stat-top">
+                <span className="stat-label">{card.rotulo}</span>
+                <span className={`stat-icon ${card.cor}`}>{card.icone}</span>
+              </div>
+              <div className="stat-value" style={{ fontSize: 23 }}>{dinheiro(card.valor)}</div>
+              <div className="stat-foot">receita registrada</div>
+            </article>
+          ) : (
+            <StatCard key={card.rotulo} {...card} i={i} />
+          )
+        )}
+      </div>
+
+      <div className="grid grid-2-1">
+        <ProximasAcoes limite={5} />
+        <Card titulo="Funil comercial">
+          {graficos ? (
+            <div className="funil">
+              {graficos.funil.map((f, i) => {
+                const max = Math.max(1, ...graficos.funil.map((x) => x.total));
+                return (
+                  <div className="funil-etapa" key={f.rotulo}>
+                    <span style={{ minWidth: 96 }} className="fs-12 soft">{f.rotulo}</span>
+                    <div
+                      className="funil-barra"
+                      style={{ width: `${Math.max(8, (f.total / max) * 100)}%`, opacity: 1 - i * 0.09 }}
+                    >
+                      {numero(f.total)}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <SkeletonLista linhas={5} altura={26} />
+          )}
+        </Card>
       </div>
 
       <div className="grid grid-2-1">

@@ -1,5 +1,12 @@
 import { completar, verificarConexao } from './GroqClient.js';
-import { promptPrimeiraMensagem, promptAnaliseResposta, promptProximoPasso } from './prompts.js';
+import {
+  promptPrimeiraMensagem,
+  promptAnaliseResposta,
+  promptProximoPasso,
+  promptCopiloto,
+  promptFollowUp
+} from './prompts.js';
+import { montarMemoria } from './memoria.js';
 import { carregarSkill, infoSkill } from './skillLoader.js';
 import { config, hasGroqKey } from '../../config.js';
 import { saudacaoDinamica } from '../../utils/greeting.js';
@@ -9,7 +16,8 @@ import {
   TAGS_POR_SLUG,
   PRIORIDADES,
   PIPELINE_SLUGS,
-  SLUGS_VALIDOS
+  SLUGS_VALIDOS,
+  faixaPotencial
 } from '../../domain/classificacao.js';
 
 /**
@@ -28,6 +36,21 @@ const ESQUEMA_ANALISE = {
     sugestao_resposta: { type: 'string' }
   },
   required: ['status', 'confianca', 'prioridade', 'score', 'motivo', 'proxima_etapa', 'sugestao_resposta'],
+  additionalProperties: false
+};
+
+/** Formato do copiloto de vendas (spec 63). */
+const ESQUEMA_COPILOTO = {
+  type: 'object',
+  properties: {
+    resumo: { type: 'string' },
+    intencao: { type: 'string' },
+    objecao: { type: 'string' },
+    temperatura: { type: 'string', enum: ['QUENTE', 'MORNO', 'FRIO', 'GELADO'] },
+    proxima_acao: { type: 'string' },
+    resposta_sugerida: { type: 'string' }
+  },
+  required: ['resumo', 'intencao', 'objecao', 'temperatura', 'proxima_acao', 'resposta_sugerida'],
   additionalProperties: false
 };
 
@@ -237,6 +260,85 @@ export const AIService = {
         { ...h, motivo: `IA indisponivel (${err.message}). Classificacao local por palavras-chave.` },
         { texto: mensagem, origem: 'HEURISTICA' }
       );
+    }
+  },
+
+  /**
+   * COPILOTO DE VENDAS (spec 63).
+   * Le a conversa + a memoria do lead e devolve resumo, intencao, objecao,
+   * temperatura, proxima acao e uma resposta pronta para o operador revisar.
+   * Nada e enviado por aqui - o envio exige acao explicita da pessoa.
+   */
+  async copiloto({ lead, historico = [] }) {
+    const { texto: memoria } = montarMemoria(lead.id);
+
+    if (!hasGroqKey()) {
+      const h = classificarHeuristico(historico.filter((m) => m.direcao === 'IN').at(-1)?.corpo || '');
+      const tag = TAGS_POR_SLUG[h.status];
+      return {
+        resumo: 'Groq nao configurada: analise local por palavras-chave.',
+        intencao: tag?.nome || 'nao identificada',
+        objecao: 'nao identificada',
+        temperatura: faixaPotencial(lead.score).faixa,
+        proxima_acao: 'Revisar a conversa manualmente e responder.',
+        resposta_sugerida: null,
+        origem: 'HEURISTICA',
+        enviadoAutomaticamente: false
+      };
+    }
+
+    const { sistema, usuario } = promptCopiloto({ lead, historico, memoria });
+    const { conteudo, modelo } = await completar({
+      sistema,
+      usuario,
+      esquema: ESQUEMA_COPILOTO,
+      temperatura: 0.3,
+      maxTokens: 700,
+      modelo: config.groq.modelAnalise
+    });
+    const bruto = extrairJson(conteudo) || {};
+
+    return {
+      resumo: String(bruto.resumo || '').slice(0, 400) || 'Sem resumo.',
+      intencao: String(bruto.intencao || 'nao identificada').slice(0, 160),
+      objecao: String(bruto.objecao || 'nenhuma identificada').slice(0, 200),
+      temperatura: ['QUENTE', 'MORNO', 'FRIO', 'GELADO'].includes(String(bruto.temperatura || '').toUpperCase())
+        ? String(bruto.temperatura).toUpperCase()
+        : faixaPotencial(lead.score).faixa,
+      proxima_acao: String(bruto.proxima_acao || '').slice(0, 220) || 'Responder o cliente.',
+      resposta_sugerida: limparMensagem(bruto.resposta_sugerida || '', { permitirLinks: true }) || null,
+      origem: 'GROQ',
+      modelo,
+      // Deixa explicito para o painel: continua sendo o operador quem envia.
+      enviadoAutomaticamente: false
+    };
+  },
+
+  /** Mensagem de follow-up para o operador revisar (spec 66). */
+  async gerarFollowUp({ lead, historico = [], diasSemResposta = 1 }) {
+    const { texto: memoria } = montarMemoria(lead.id);
+
+    if (!hasGroqKey()) {
+      const saudacao = saudacaoDinamica();
+      return {
+        mensagem: `${saudacao}! Passando para saber se você chegou a ver o modelo que preparei para a ${lead.nome_estabelecimento}.\n\nSe quiser, posso te explicar rapidinho como ficaria. Faz sentido para vocês?`,
+        origem: 'SKILL_PADRAO'
+      };
+    }
+
+    try {
+      const { sistema, usuario } = promptFollowUp({ lead, historico, dias: diasSemResposta, memoria });
+      const { conteudo, modelo } = await completar({ sistema, usuario, maxTokens: 350 });
+      const limpa = limparMensagem(conteudo, { permitirLinks: Boolean(config.operacao.linkDemonstracao) });
+      if (!limpa || temPlaceholder(limpa)) throw new Error('Mensagem de follow-up invalida.');
+      return { mensagem: limpa, origem: 'GROQ', modelo };
+    } catch (err) {
+      logger.warn('ia', `Follow-up via Groq falhou (${err.message}). Usando texto padrao.`);
+      const saudacao = saudacaoDinamica();
+      return {
+        mensagem: `${saudacao}! Passando para saber se você chegou a ver o modelo que preparei para a ${lead.nome_estabelecimento}.\n\nSe quiser, posso te explicar rapidinho como ficaria. Faz sentido para vocês?`,
+        origem: 'SKILL_PADRAO'
+      };
     }
   },
 

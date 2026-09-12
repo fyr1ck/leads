@@ -1,4 +1,6 @@
 import { get, all } from '../db/index.js';
+import DemoService from './DemoService.js';
+import SalesService from './SalesService.js';
 import * as leadRepo from '../repositories/leadRepo.js';
 import * as messageRepo from '../repositories/messageRepo.js';
 import * as historyRepo from '../repositories/historyRepo.js';
@@ -37,6 +39,9 @@ export function dashboard() {
   const contatados = n(c.contatados);
   const responderam = n(c.responderam);
 
+  const demos = DemoService.estatisticas();
+  const financeiro = SalesService.metricas();
+
   return {
     cards: {
       leads_importados: n(c.total),
@@ -46,8 +51,15 @@ export function dashboard() {
       aguardando: n(etiquetas?.aguardando) + n(etiquetas?.acompanhamento),
       nao_interessados: n(etiquetas?.frios),
       negociacoes: n(etiquetas?.negociando),
-      conversoes: n(c.fechados)
+      conversoes: n(c.fechados),
+      // v2 - Sales OS
+      demos: demos.total,
+      demos_acessadas: demos.acessadas,
+      clientes: n(c.fechados),
+      faturamento: financeiro.faturamento
     },
+    demos,
+    financeiro,
     oportunidades: {
       quentes: n(etiquetas?.quentes),
       acompanhamento: n(etiquetas?.acompanhamento),
@@ -89,8 +101,35 @@ export function graficos({ dias = 14 } = {}) {
     pipeline: PIPELINE.map((etapa) => ({
       ...etapa,
       total: n(get('SELECT COUNT(*) AS v FROM leads WHERE pipeline = ?', etapa.slug)?.v)
-    }))
+    })),
+    // v2 - Sales OS
+    funil: funil(),
+    porNicho: all(
+      `SELECT COALESCE(NULLIF(TRIM(nicho), ''), 'Sem nicho') AS rotulo, COUNT(*) AS total
+         FROM leads GROUP BY rotulo ORDER BY total DESC LIMIT 12`
+    ),
+    faturamento: SalesService.serieFaturamento(6),
+    campanhas: all(
+      `SELECT c.nome AS rotulo, c.enviados AS total,
+              (SELECT COUNT(*) FROM campaign_leads cl JOIN leads l ON l.id = cl.lead_id
+                WHERE cl.campaign_id = c.id AND l.respondeu = 1) AS respostas
+         FROM campaigns c ORDER BY c.id DESC LIMIT 8`
+    )
   };
+}
+
+/** Funil comercial completo (spec 72). Sempre numeros reais. */
+export function funil() {
+  const etapa = (rotulo, sql, ...params) => ({ rotulo, total: n(get(sql, ...params)?.v) });
+  return [
+    etapa('Leads', 'SELECT COUNT(*) AS v FROM leads'),
+    etapa('Contatados', 'SELECT COUNT(*) AS v FROM leads WHERE quantidade_mensagens_enviadas > 0'),
+    etapa('Responderam', 'SELECT COUNT(*) AS v FROM leads WHERE respondeu = 1'),
+    etapa('Interessados', `SELECT COUNT(*) AS v FROM leads WHERE etiqueta IN (${lista(SLUGS_QUENTES)})`),
+    etapa('Demonstracoes', 'SELECT COUNT(DISTINCT lead_id) AS v FROM demos'),
+    etapa('Negociacao', "SELECT COUNT(*) AS v FROM leads WHERE pipeline = 'NEGOCIACAO'"),
+    etapa('Clientes', "SELECT COUNT(*) AS v FROM leads WHERE status = 'FECHADO'")
+  ];
 }
 
 /** Blocos "OPORTUNIDADES QUENTES" do dashboard (spec 58.9). */
@@ -107,4 +146,4 @@ export function oportunidadesQuentes(limite = 5) {
   );
 }
 
-export default { dashboard, graficos, oportunidadesQuentes };
+export default { dashboard, graficos, oportunidadesQuentes, funil };

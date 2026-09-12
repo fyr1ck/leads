@@ -1,6 +1,7 @@
 import whatsapp from './whatsapp/WhatsAppService.js';
 import MessageService from './MessageService.js';
 import AIService from './ai/AIService.js';
+import FollowUpService from './FollowUpService.js';
 import * as campaignRepo from '../repositories/campaignRepo.js';
 import * as leadRepo from '../repositories/leadRepo.js';
 import * as messageRepo from '../repositories/messageRepo.js';
@@ -232,7 +233,10 @@ class CampaignRunner {
         this._emitir(id);
         continue;
       }
-      if (lead.quantidade_mensagens_enviadas > 0 || leadRepo.jaFoiContatadoPorTelefone(lead.telefone_e164)) {
+      // Campanha de REATIVACAO e a unica excecao: o operador escolheu na mao
+      // quem deve receber de novo (spec 70). Fora dela, a trava continua total.
+      const reativacao = campanha.tipo === 'REATIVACAO';
+      if (!reativacao && (lead.quantidade_mensagens_enviadas > 0 || leadRepo.jaFoiContatadoPorTelefone(lead.telefone_e164))) {
         campaignRepo.marcarItem(item.item_id, 'IGNORADO', { erro: 'Esse telefone ja recebeu mensagem antes.' });
         campaignRepo.incrementar(id, 'ignorados');
         logger.warn('campanha', `${lead.nome_estabelecimento} ignorado: ja foi contatado antes.`);
@@ -266,6 +270,12 @@ class CampaignRunner {
         campaignRepo.incrementar(id, 'enviados');
         exec.errosConsecutivos = 0;
         exec.enviadosNoBloco += 1;
+        // Sequencia de follow-up (+1, +3, +7) ja nasce agendada (spec 66).
+        try {
+          FollowUpService.agendarSequencia(lead.id, { campaignId: id });
+        } catch (err) {
+          logger.warn('campanha', `Nao consegui agendar o follow-up de ${lead.nome_estabelecimento}: ${err.message}`);
+        }
       } catch (err) {
         const amigavel = mensagemAmigavel(err);
         campaignRepo.marcarItem(item.item_id, 'ERRO', { mensagem: texto, erro: amigavel });

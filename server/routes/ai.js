@@ -6,6 +6,7 @@ import * as analysisRepo from '../repositories/analysisRepo.js';
 import { asyncHandler } from '../middleware/index.js';
 import { AppError, naoEncontrado } from '../utils/errors.js';
 import { carregarSkill } from '../services/ai/skillLoader.js';
+import { montarMemoria } from '../services/ai/memoria.js';
 import { faixaPotencial, grupoOportunidade } from '../domain/classificacao.js';
 
 const router = Router();
@@ -67,6 +68,22 @@ router.post(
       grupo: grupoOportunidade(analise.etiqueta),
       enviadoAutomaticamente: false
     });
+  })
+);
+
+/**
+ * COPILOTO DE VENDAS (spec 63).
+ * Resumo, intencao, objecao, temperatura, proxima acao e resposta sugerida.
+ * Retorna `enviadoAutomaticamente: false` sempre: quem envia e o operador.
+ */
+router.post(
+  '/copiloto',
+  asyncHandler(async (req, res) => {
+    const lead = leadRepo.porId(req.body?.leadId);
+    if (!lead) throw naoEncontrado('Lead');
+    const historico = messageRepo.doLead(lead.id, 30);
+    const r = await AIService.copiloto({ lead, historico });
+    res.json({ ...r, lead_id: lead.id, memoria: montarMemoria(lead.id).texto });
   })
 );
 

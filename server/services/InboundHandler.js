@@ -6,6 +6,9 @@ import * as historyRepo from '../repositories/historyRepo.js';
 import * as analysisRepo from '../repositories/analysisRepo.js';
 import * as tagRepo from '../repositories/tagRepo.js';
 import * as settingsRepo from '../repositories/settingsRepo.js';
+import ActivityService from './ActivityService.js';
+import ScoreService from './ScoreService.js';
+import FollowUpService from './FollowUpService.js';
 import { bus, EVENTOS } from '../realtime/bus.js';
 import { logger } from '../utils/logger.js';
 import { normalizarTelefone, formatarTelefone } from '../utils/phone.js';
@@ -72,6 +75,15 @@ async function processar(msg) {
       resposta: msg.texto
     });
 
+    ActivityService.registrar({
+      lead_id: lead.id,
+      tipo: 'MENSAGEM_RECEBIDA',
+      descricao: msg.texto.slice(0, 180),
+      meta: { message_id: registrada.id }
+    });
+    // Quem respondeu nao precisa mais da cobranca automatica (spec 66).
+    FollowUpService.cancelarPendentesDoLead(lead.id);
+
     logger.info('inbox', `${atualizado.nome_estabelecimento} respondeu.`);
     bus.emit(EVENTOS.MENSAGEM_RECEBIDA, { lead: atualizado, mensagem: registrada });
     bus.emit(EVENTOS.LEAD_ATUALIZADO, { lead: atualizado });
@@ -105,6 +117,19 @@ async function processar(msg) {
       prioridade: analise.prioridade,
       score: analise.score,
       pipeline: analise.proxima_etapa
+    });
+
+    // O score final vem de sinais reais e auditaveis (spec 61); a leitura da IA
+    // entra como um dos sinais, nao como a palavra final.
+    const pontuacao = ScoreService.recalcular(lead.id);
+    atualizado = leadRepo.porId(lead.id);
+
+    ActivityService.registrar({
+      lead_id: lead.id,
+      tipo: 'ETIQUETA',
+      titulo: `Etiqueta: ${analise.etiqueta.replace(/_/g, ' ').toLowerCase()}`,
+      descricao: analise.motivo,
+      meta: { confianca: analise.confianca, origem: analise.origem }
     });
 
     try {
@@ -147,6 +172,16 @@ async function processar(msg) {
       titulo: `${atualizado.nome_estabelecimento} respondeu`,
       texto: analise.etiqueta.replace(/_/g, ' '),
       leadId: atualizado.id
+    });
+
+    // Notificacao persistente (spec 75): fica na central ate ser lida.
+    const quente = (pontuacao?.score ?? atualizado.score) >= 70;
+    ActivityService.notificar({
+      tipo: quente ? 'lead_quente' : 'resposta',
+      titulo: `${quente ? '\u{1F525} ' : ''}${atualizado.nome_estabelecimento} respondeu`,
+      texto: `${analise.etiqueta.replace(/_/g, ' ').toLowerCase()} · score ${pontuacao?.score ?? atualizado.score}`,
+      lead_id: atualizado.id,
+      rota: `/conversas?lead=${atualizado.id}`
     });
     bus.emit(EVENTOS.STATS, {});
   } catch (err) {

@@ -210,6 +210,33 @@ test('campanha pausa automaticamente quando o WhatsApp cai', async () => {
   assert.ok(campaignRepo.progresso(campanha.id).pendentes > 0, 'a fila continua salva para retomar depois');
 });
 
+test('so a campanha de REATIVACAO pode reenviar para quem ja foi contatado', async () => {
+  // o teste anterior derruba a conexao de proposito
+  await whatsapp.conectar();
+
+  const contatado = all('SELECT * FROM leads WHERE quantidade_mensagens_enviadas > 0 LIMIT 1')[0];
+  assert.ok(contatado, 'precisa de um lead ja contatado');
+
+  // 1) campanha comum: continua ignorando por duplicidade
+  const comum = campaignRepo.criar({ nome: 'Comum', delay_min: 1, delay_max: 1, bloco_tamanho: 0 });
+  campaignRepo.enfileirar(comum.id, [contatado]);
+  const antesComum = fake.enviadas.length;
+  await campaignRunner.iniciar(comum.id);
+  for (let i = 0; i < 30 && campaignRepo.porId(comum.id).status === 'ATIVA'; i += 1) await esperar(150);
+  assert.equal(campaignRepo.progresso(comum.id).ignorados, 1, 'campanha comum deve ignorar');
+  assert.equal(fake.enviadas.length, antesComum, 'nenhum envio na campanha comum');
+
+  // 2) campanha de reativacao: o operador escolheu, entao envia
+  const reativacao = campaignRepo.criar({ nome: 'Reativacao', delay_min: 1, delay_max: 1, bloco_tamanho: 0 });
+  campaignRepo.atualizar(reativacao.id, { tipo: 'REATIVACAO' });
+  campaignRepo.enfileirar(reativacao.id, [contatado]);
+  const antesReativacao = fake.enviadas.length;
+  await campaignRunner.iniciar(reativacao.id);
+  for (let i = 0; i < 30 && campaignRepo.porId(reativacao.id).status === 'ATIVA'; i += 1) await esperar(150);
+  assert.equal(campaignRepo.progresso(reativacao.id).enviados, 1, 'reativacao deve enviar');
+  assert.equal(fake.enviadas.length, antesReativacao + 1);
+});
+
 test('historico permanece mesmo depois de limpar a prospeccao', () => {
   const antes = all("SELECT COUNT(*) AS n FROM contact_history WHERE tipo = 'ENVIO'")[0].n;
   leadRepo.limparProspeccaoContatados();

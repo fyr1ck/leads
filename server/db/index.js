@@ -4,6 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { paths } from '../config.js';
 import { TAGS_PADRAO } from '../domain/classificacao.js';
+import { NICHOS_PADRAO, slugificarNicho } from '../domain/nichos.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 
@@ -67,10 +68,60 @@ export function tx(fn) {
   }
 }
 
+/**
+ * Acrescenta colunas que ainda nao existem, sem tocar nos dados.
+ * Usado para evoluir o schema sem recriar o banco de quem ja esta usando.
+ */
+function garantirColunas(tabela, colunas) {
+  const existentes = new Set(all(`PRAGMA table_info(${tabela})`).map((c) => c.name));
+  for (const [nome, definicao] of Object.entries(colunas)) {
+    if (existentes.has(nome)) continue;
+    db.exec(`ALTER TABLE ${tabela} ADD COLUMN ${nome} ${definicao}`);
+  }
+}
+
+/** Etapas antigas -> etapas do pipeline comercial (spec 74). */
+const PIPELINE_ANTIGO = {
+  NOVOS: 'NOVO',
+  RESPONDERAM: 'RESPONDEU',
+  INTERESSADOS: 'INTERESSADO',
+  DEMONSTRACAO: 'DEMO',
+  FECHAMENTO: 'NEGOCIACAO',
+  CLIENTE: 'FECHADO'
+};
+
 /** Cria o schema e semeia etiquetas/configuracoes padrao. Idempotente. */
 export function migrar() {
   const schema = fs.readFileSync(path.resolve(here, 'schema.sql'), 'utf8');
   db.exec(schema);
+
+  // --- colunas novas da v2 (Sales OS) ---
+  garantirColunas('leads', {
+    estado: 'TEXT',
+    nicho: 'TEXT',
+    place_id: 'TEXT',
+    avaliacao: 'REAL',
+    total_avaliacoes: 'INTEGER',
+    status_site: 'TEXT',
+    temperatura: 'TEXT',
+    score_motivos: 'TEXT',
+    proxima_acao: 'TEXT',
+    proximo_followup: 'TEXT',
+    search_id: 'INTEGER',
+    descoberto_em: 'TEXT'
+  });
+  garantirColunas('campaigns', {
+    descricao: 'TEXT',
+    nicho: 'TEXT',
+    localizacao: 'TEXT',
+    tipo: "TEXT NOT NULL DEFAULT 'PROSPECCAO'"
+  });
+
+  for (const [antigo, novo] of Object.entries(PIPELINE_ANTIGO)) {
+    run('UPDATE leads SET pipeline = ? WHERE pipeline = ?', novo, antigo);
+    run('UPDATE tags SET pipeline = ? WHERE pipeline = ?', novo, antigo);
+    run('UPDATE ai_analyses SET proxima_etapa = ? WHERE proxima_etapa = ?', novo, antigo);
+  }
 
   for (const t of TAGS_PADRAO) {
     run(
@@ -89,6 +140,17 @@ export function migrar() {
      VALUES (1, 'principal', 'DESCONECTADO')
      ON CONFLICT(id) DO NOTHING`
   );
+
+  // Nichos padrao da busca de leads (spec 59.1).
+  for (const n of NICHOS_PADRAO) {
+    run(
+      `INSERT INTO niches (nome, slug, termo, sistema) VALUES (?,?,?,1)
+       ON CONFLICT(slug) DO UPDATE SET nome = excluded.nome, termo = excluded.termo, sistema = 1`,
+      n.nome,
+      slugificarNicho(n.nome),
+      n.termo
+    );
+  }
 
   return { ok: true };
 }

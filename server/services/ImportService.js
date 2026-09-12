@@ -3,6 +3,7 @@ import path from 'node:path';
 import fs from 'node:fs';
 import { run, all, tx } from '../db/index.js';
 import * as leadRepo from '../repositories/leadRepo.js';
+import ActivityService from './ActivityService.js';
 import { mapearColunas, CAMPOS } from '../utils/columnMap.js';
 import { normalizarTelefone, formatarTelefone } from '../utils/phone.js';
 import { bus, EVENTOS } from '../realtime/bus.js';
@@ -148,6 +149,11 @@ export async function importar(arquivo, { nomeOriginal = null, mapaManual = null
       if (acao === 'CRIADO') {
         resumo.importados += 1;
         criados.push(lead.id);
+        ActivityService.registrar({
+          lead_id: lead.id,
+          tipo: 'LEAD_IMPORTADO',
+          descricao: nomeOriginal ? `Planilha ${nomeOriginal}` : 'Planilha XLSX'
+        });
       } else if (acao === 'ATUALIZADO') resumo.atualizados += 1;
       else resumo.duplicados += 1;
     }

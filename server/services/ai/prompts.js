@@ -1,4 +1,5 @@
 import { carregarSkill } from './skillLoader.js';
+import { blocoConfig } from './SkillService.js';
 import { contextoDeHorario } from '../../utils/greeting.js';
 import { SLUGS_VALIDOS } from '../../domain/classificacao.js';
 import { config } from '../../config.js';
@@ -36,6 +37,13 @@ const REGRAS_SISTEMA = `REGRAS DO SISTEMA (obrigatorias, acima de qualquer criat
 function blocoSistema() {
   const skill = carregarSkill();
   const { saudacao, horaLocal, fuso } = contextoDeHorario();
+  // Configuracao comercial do painel (precos, objecoes, FAQ) - spec 65.
+  let configuracao = '';
+  try {
+    configuracao = blocoConfig();
+  } catch {
+    configuracao = '';
+  }
   return [
     'Voce e o agente comercial da Henvix.',
     '',
@@ -43,6 +51,7 @@ function blocoSistema() {
     skill ||
       '[ATENCAO: arquivo da Skill nao encontrado. Nao invente estrategia comercial: use apenas a abordagem padrao informada pelo sistema.]',
     '===== FIM DA SKILL =====',
+    configuracao ? `\n${configuracao}` : '',
     '',
     REGRAS_SISTEMA,
     '',
@@ -125,6 +134,77 @@ export function promptAnaliseResposta({ lead, mensagem, historico = [] }) {
     '  "sugestao_resposta": "Claro! Vou te enviar o modelo..."',
     '}'
   ].join('\n');
+
+  return { sistema: blocoSistema(), usuario };
+}
+
+/** Copiloto de vendas dentro da conversa (spec 63). */
+export function promptCopiloto({ lead, historico = [], memoria = '' }) {
+  const conversa = historico
+    .slice(-16)
+    .map((m) => `${m.direcao === 'IN' ? 'CLIENTE' : 'JOAO HENRIQUE'}: ${m.corpo}`)
+    .join('\n');
+
+  const usuario = [
+    'TAREFA: agir como copiloto do vendedor humano nesta conversa.',
+    'Voce NAO envia nada. Tudo o que voce escrever aparece no painel para a pessoa decidir.',
+    '',
+    'CONTEXTO DO LEAD:',
+    contextoDoLead(lead),
+    '',
+    memoria ? `MEMORIA DO RELACIONAMENTO (fatos ja registrados):\n${memoria}` : '',
+    '',
+    'CONVERSA:',
+    conversa || '(sem mensagens ainda)',
+    '',
+    'Analise e responda em JSON:',
+    '- resumo: 1 a 2 frases sobre onde a conversa esta.',
+    '- intencao: o que o cliente quer agora, em poucas palavras.',
+    '- objecao: a objecao real (ou "nenhuma identificada").',
+    '- temperatura: QUENTE, MORNO, FRIO ou GELADO.',
+    '- proxima_acao: a acao comercial mais util agora, em uma frase.',
+    '- resposta_sugerida: a mensagem pronta para o vendedor revisar, seguindo a Skill,',
+    '  curta, natural, sem inventar preco, prazo ou resultado.',
+    '',
+    'RESPONDA SOMENTE COM JSON VALIDO.'
+  ]
+    .filter((l) => l !== '')
+    .join('\n');
+
+  return { sistema: blocoSistema(), usuario };
+}
+
+/** Mensagem de follow-up (spec 66). */
+export function promptFollowUp({ lead, historico = [], dias = 1, memoria = '' }) {
+  const conversa = historico
+    .slice(-10)
+    .map((m) => `${m.direcao === 'IN' ? 'CLIENTE' : 'JOAO HENRIQUE'}: ${m.corpo}`)
+    .join('\n');
+
+  const usuario = [
+    `TAREFA: escrever um follow-up ${dias} dia(s) depois do ultimo contato.`,
+    'O cliente nao respondeu ou a conversa esfriou. Voce NAO envia: o vendedor revisa antes.',
+    '',
+    'CONTEXTO DO LEAD:',
+    contextoDoLead(lead),
+    '',
+    memoria ? `MEMORIA DO RELACIONAMENTO:\n${memoria}` : '',
+    '',
+    'CONVERSA ATE AQUI:',
+    conversa || '(apenas a abordagem inicial)',
+    '',
+    'REGRAS DO FOLLOW-UP:',
+    '- Curto: no maximo 3 linhas.',
+    '- Nao repetir a mensagem anterior com outras palavras.',
+    '- Nao cobrar, nao pressionar, nao soar automatico.',
+    '- Retomar pelo ponto onde a conversa parou (use a memoria acima).',
+    '- Terminar com uma pergunta leve e facil de responder.',
+    '- Nada de preco, prazo ou resultado inventado.',
+    '',
+    'RESPONDA APENAS COM O TEXTO DA MENSAGEM.'
+  ]
+    .filter((l) => l !== '')
+    .join('\n');
 
   return { sistema: blocoSistema(), usuario };
 }
