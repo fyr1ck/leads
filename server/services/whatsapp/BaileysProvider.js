@@ -13,7 +13,9 @@ import pino from 'pino';
 import QRCode from 'qrcode';
 import { config } from '../../config.js';
 import { logger } from '../../utils/logger.js';
-import { digitos, jidDeTelefone, telefoneDeJid, variantesBR } from '../../utils/phone.js';
+import { digitos, telefoneDeJid, variantesBR } from '../../utils/phone.js';
+
+const ehLid = (jid) => String(jid || '').endsWith('@lid');
 import * as sessionStore from './SessionStore.js';
 
 /**
@@ -111,6 +113,12 @@ export class BaileysProvider extends EventEmitter {
       this.sock.ev.on('creds.update', saveCreds);
       this.sock.ev.on('connection.update', (u) => this._onConnectionUpdate(u));
       this.sock.ev.on('messages.upsert', (u) => this._onMessages(u));
+
+      // Quando o WhatsApp revela o numero real por tras de um LID.
+      this.sock.ev.on('chats.phoneNumberShare', ({ lid, jid }) => {
+        const telefone = jid ? telefoneDeJid(jid) : null;
+        if (lid && telefone) this.emit('numeroCompartilhado', { lid, telefone });
+      });
 
       // Etiquetas que ja existem no aparelho chegam pelo app-state.
       this.sock.ev.on('labels.edit', (label) => {
@@ -224,9 +232,17 @@ export class BaileysProvider extends EventEmitter {
         const texto = this._extrairTexto(msg);
         if (!texto || !String(texto).trim()) continue;
 
+        // O WhatsApp esta trocando o numero por um LID (id interno, "xxx@lid")
+        // em parte das conversas. Os digitos de um LID NAO sao telefone: tratar
+        // como telefone faz a resposta ir para um numero que nao existe e sumir
+        // sem erro. O numero real, quando o WhatsApp informa, vem em senderPn.
+        const lid = ehLid(jid) ? jid : null;
+        const telefone = lid ? (msg.key?.senderPn ? telefoneDeJid(msg.key.senderPn) : null) : telefoneDeJid(jid);
+
         this.emit('mensagem', {
-          telefone: telefoneDeJid(jid),
+          telefone,
           jid,
+          lid,
           texto: String(texto).trim(),
           waId: msg.key?.id || null,
           pushName: msg.pushName || null,
@@ -238,26 +254,52 @@ export class BaileysProvider extends EventEmitter {
     }
   }
 
-  /** Descobre o JID real do numero (trata o nono digito). Retorna null se nao existir. */
+  /**
+   * Consulta o numero no WhatsApp (trata o nono digito).
+   * Retorna o JID se existir, null se nao existir, e LANCA se a consulta falhar -
+   * "nao sei" nao pode virar "manda assim mesmo".
+   */
+  async consultarNumero(telefoneE164) {
+    if (!this.sock || this.status !== 'CONECTADO') throw new Error('WhatsApp not connected');
+    const resultados = await this.sock.onWhatsApp(...variantesBR(telefoneE164));
+    return (resultados || []).find((r) => r?.exists)?.jid || null;
+  }
+
+  /** Versao tolerante (usada em consultas informativas): falha vira null. */
   async existeNoWhatsApp(telefoneE164) {
-    if (!this.sock || this.status !== 'CONECTADO') return null;
-    const candidatos = variantesBR(telefoneE164);
     try {
-      const resultados = await this.sock.onWhatsApp(...candidatos);
-      const achado = (resultados || []).find((r) => r?.exists);
-      return achado?.jid || null;
+      return await this.consultarNumero(telefoneE164);
     } catch (err) {
       logger.debug('whatsapp', `onWhatsApp falhou para ${telefoneE164}: ${err.message}`);
       return null;
     }
   }
 
-  async enviarTexto(telefoneE164, texto) {
+  /**
+   * Envia texto para um telefone OU para o endereco exato de uma conversa
+   * ("xxx@s.whatsapp.net" / "xxx@lid").
+   *
+   * Nunca envia para um numero "chutado": o WhatsApp aceita mensagem para numero
+   * inexistente sem dar erro e ela simplesmente nao chega - o painel mostraria
+   * "enviada" para algo que ninguem recebeu.
+   */
+  async enviarTexto(destino, texto) {
     if (!this.sock || this.status !== 'CONECTADO') {
       throw new Error('WhatsApp not connected');
     }
-    const jid = (await this.existeNoWhatsApp(telefoneE164)) || jidDeTelefone(telefoneE164);
-    if (!digitos(telefoneE164)) throw new Error('Telefone invalido');
+
+    let jid;
+    if (String(destino || '').includes('@')) {
+      jid = destino;
+    } else {
+      if (!digitos(destino)) throw new Error('Telefone invalido');
+      try {
+        jid = await this.consultarNumero(destino);
+      } catch (err) {
+        throw new Error(`Nao consegui confirmar o numero no WhatsApp (${err.message}). Nada foi enviado.`);
+      }
+      if (!jid) throw new Error('Esse numero nao esta no WhatsApp. Nada foi enviado.');
+    }
 
     // Indicador de digitacao: comportamento normal de um cliente do WhatsApp.
     try {

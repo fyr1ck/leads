@@ -67,6 +67,94 @@ export function porDominioSite(dominio) {
 export const porGoogleMaps = (url) =>
   url ? get('SELECT * FROM leads WHERE google_maps = ?', url) : null;
 
+/** Lead pelo endereco exato da conversa no WhatsApp. */
+export const porWaJid = (jid) => (jid ? get('SELECT * FROM leads WHERE wa_jid = ?', jid) : null);
+
+/**
+ * Lead criado a partir de uma mensagem recebida.
+ * Sem telefone (contato que chegou so com LID) a chave de duplicidade e o
+ * proprio endereco da conversa - nunca o nome, senao dois "Rick" diferentes
+ * viravam o mesmo lead.
+ */
+export function criarDeWhatsApp({ nome, telefone_e164 = null, wa_jid = null }) {
+  if (telefone_e164) {
+    const { lead } = criarOuEnriquecer(
+      { nome_estabelecimento: nome, telefone: telefone_e164, observacoes: 'Lead criado a partir de uma mensagem recebida.' },
+      'WHATSAPP_INBOUND'
+    );
+    return wa_jid ? atualizar(lead.id, { wa_jid }) : lead;
+  }
+  const r = run(
+    `INSERT INTO leads (nome_estabelecimento, wa_jid, dedupe_key, origem, observacoes, status, pipeline, na_prospeccao)
+     VALUES (?, ?, ?, 'WHATSAPP_INBOUND', ?, 'NOVO', 'NOVO', 0)`,
+    String(nome || 'Contato do WhatsApp').trim(),
+    wa_jid,
+    `wa:${wa_jid}`,
+    'Contato chegou pelo WhatsApp sem numero visivel (LID). As respostas vao para a propria conversa.'
+  );
+  return porId(Number(r.lastInsertRowid));
+}
+
+/** Leads antigos que podem ter o LID gravado como se fosse telefone. */
+export const suspeitosDeLid = () =>
+  all("SELECT * FROM leads WHERE origem = 'WHATSAPP_INBOUND' AND telefone_e164 IS NOT NULL AND wa_jid IS NULL");
+
+/** Corrige um lead cujo "telefone" era na verdade o LID da conversa. */
+export function converterParaLid(lead) {
+  const jid = `${String(lead.telefone_e164).replace(/\D/g, '')}@lid`;
+  const nomeEraONumero = /^\+?\d[\d\s()+-]*$/.test(String(lead.nome_estabelecimento || '').trim());
+  return atualizar(lead.id, {
+    wa_jid: jid,
+    telefone_e164: null,
+    telefone: null,
+    dedupe_key: `wa:${jid}`,
+    na_prospeccao: 0,
+    ...(nomeEraONumero ? { nome_estabelecimento: 'Contato do WhatsApp' } : {})
+  });
+}
+
+/**
+ * Junta dois leads que eram a mesma pessoa (ex.: a resposta chegou por LID e
+ * depois o WhatsApp revelou que era o numero de um lead ja prospectado).
+ * Tudo do `origemId` passa para o `destinoId`, e o `origemId` deixa de existir.
+ */
+export function mesclar(destinoId, origemId) {
+  if (!destinoId || !origemId || Number(destinoId) === Number(origemId)) return porId(destinoId);
+  return tx(() => {
+    for (const tabela of ['messages', 'ai_analyses', 'contact_history', 'activities', 'follow_ups', 'demos', 'sales', 'notifications', 'search_results']) {
+      run(`UPDATE ${tabela} SET lead_id = ? WHERE lead_id = ?`, destinoId, origemId);
+    }
+    // tabelas com unicidade por lead: copia o que nao conflita e descarta o resto
+    run('UPDATE OR IGNORE campaign_leads SET lead_id = ? WHERE lead_id = ?', destinoId, origemId);
+    run('DELETE FROM campaign_leads WHERE lead_id = ?', origemId);
+    run('UPDATE OR IGNORE lead_tags SET lead_id = ? WHERE lead_id = ?', destinoId, origemId);
+    run('DELETE FROM lead_tags WHERE lead_id = ?', origemId);
+
+    const origem = porId(origemId);
+    const destino = porId(destinoId);
+    const ultima = get(
+      "SELECT corpo, created_at FROM messages WHERE lead_id = ? ORDER BY created_at DESC, id DESC LIMIT 1",
+      destinoId
+    );
+    const primeiraResposta = get(
+      "SELECT MIN(created_at) AS d FROM messages WHERE lead_id = ? AND direcao = 'IN'",
+      destinoId
+    )?.d;
+
+    atualizar(destinoId, {
+      respondeu: primeiraResposta ? 1 : destino.respondeu,
+      primeira_resposta_data: primeiraResposta || destino.primeira_resposta_data,
+      ultima_mensagem: ultima?.corpo ?? destino.ultima_mensagem,
+      ultima_mensagem_data: ultima?.created_at ?? destino.ultima_mensagem_data,
+      etiqueta: destino.etiqueta || origem?.etiqueta || null,
+      prioridade: destino.prioridade || origem?.prioridade || null,
+      wa_jid: origem?.wa_jid || destino.wa_jid
+    });
+    run('DELETE FROM leads WHERE id = ?', origemId);
+    return porId(destinoId);
+  });
+}
+
 /**
  * Cria o lead ou, se ele ja existir, apenas completa campos vazios.
  * Nunca cria um segundo lead para o mesmo telefone (spec 39).
@@ -140,7 +228,8 @@ const COLUNAS_EDITAVEIS = new Set([
   'na_prospeccao', 'adiado_ate', 'fechado_em', 'dados_extra',
   // v2 - Sales OS
   'estado', 'nicho', 'place_id', 'avaliacao', 'total_avaliacoes', 'status_site',
-  'temperatura', 'score_motivos', 'proxima_acao', 'proximo_followup', 'search_id', 'descoberto_em'
+  'temperatura', 'score_motivos', 'proxima_acao', 'proximo_followup', 'search_id', 'descoberto_em',
+  'wa_jid'
 ]);
 
 export function atualizar(id, patch = {}) {

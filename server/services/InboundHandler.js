@@ -25,24 +25,90 @@ import { faixaPotencial, grupoOportunidade } from '../domain/classificacao.js';
  * possivel daqui para um envio automatico.
  */
 function garantirLead(msg) {
-  const e164 = normalizarTelefone(msg.telefone);
-  if (!e164) return null;
+  // msg.telefone pode ser null: conversa que chegou so com LID (xxx@lid).
+  const e164 = msg.telefone ? normalizarTelefone(msg.telefone) : null;
+  if (!e164 && !msg.jid) return null;
 
-  const existente = leadRepo.porTelefone(e164);
-  if (existente) return existente;
+  // 1) pelo endereco exato da conversa  2) pelo numero real
+  const existente = leadRepo.porWaJid(msg.jid) || (e164 && leadRepo.porTelefone(e164)) || null;
 
-  // Numero desconhecido respondeu: cria um lead com os dados REAIS que temos
-  // (nome do perfil do WhatsApp e telefone). Nada inventado (spec 52).
-  const { lead } = leadRepo.criarOuEnriquecer(
-    {
-      nome_estabelecimento: msg.pushName?.trim() || formatarTelefone(e164),
-      telefone: e164,
-      observacoes: 'Lead criado automaticamente a partir de uma mensagem recebida.'
-    },
-    'WHATSAPP_INBOUND'
+  if (existente) {
+    const patch = {};
+    // o ultimo endereco de onde a pessoa escreveu e o destino mais confiavel
+    if (msg.jid && existente.wa_jid !== msg.jid) patch.wa_jid = msg.jid;
+    if (e164 && !existente.telefone_e164 && !leadRepo.porTelefone(e164)) {
+      patch.telefone_e164 = e164;
+      patch.telefone = e164;
+    }
+    return Object.keys(patch).length ? leadRepo.atualizar(existente.id, patch) : existente;
+  }
+
+  // Contato novo respondeu: cria o lead so com dados REAIS (spec 52) - nome do
+  // perfil do WhatsApp e, quando existir, o telefone. Nunca os digitos do LID.
+  const lead = leadRepo.criarDeWhatsApp({
+    nome: msg.pushName?.trim() || (e164 ? formatarTelefone(e164) : 'Contato do WhatsApp'),
+    telefone_e164: e164,
+    wa_jid: msg.jid || null
+  });
+  logger.info(
+    'inbox',
+    `Nova conversa de fora da base: ${lead.nome_estabelecimento}${e164 ? '' : ' (numero oculto pelo WhatsApp)'}`
   );
-  logger.info('inbox', `Nova conversa de um numero que nao estava na base: ${lead.nome_estabelecimento}`);
   return lead;
+}
+
+/**
+ * O WhatsApp revelou o numero por tras de um LID. Se esse numero ja era de um
+ * lead (tipico: prospectamos pelo telefone e a resposta veio por LID), junta os
+ * dois para a conversa ficar num lugar so.
+ */
+export function vincularNumero({ lid, telefone }) {
+  try {
+    const e164 = normalizarTelefone(telefone);
+    if (!lid || !e164) return;
+    const doLid = leadRepo.porWaJid(lid);
+    const doTelefone = leadRepo.porTelefone(e164);
+
+    if (doLid && doTelefone && doLid.id !== doTelefone.id) {
+      const unido = leadRepo.mesclar(doTelefone.id, doLid.id);
+      ScoreService.recalcular(unido.id, { silencioso: true });
+      logger.ok('inbox', `Conversa por LID unida ao lead ${unido.nome_estabelecimento}.`);
+      bus.emit(EVENTOS.LEAD_ATUALIZADO, { lead: unido });
+    } else if (doLid && !doTelefone && !doLid.telefone_e164) {
+      bus.emit(EVENTOS.LEAD_ATUALIZADO, { lead: leadRepo.atualizar(doLid.id, { telefone_e164: e164, telefone: e164 }) });
+    } else if (!doLid && doTelefone && !doTelefone.wa_jid) {
+      leadRepo.atualizar(doTelefone.id, { wa_jid: lid });
+    }
+  } catch (err) {
+    logger.warn('inbox', `Nao consegui vincular numero ao LID: ${err.message}`);
+  }
+}
+
+/**
+ * Conserta leads criados antes desta correcao, quando os digitos do LID eram
+ * gravados como telefone. Um lead que chegou pelo WhatsApp mas cujo "numero"
+ * nao existe no WhatsApp so pode ser um LID. Roda uma vez por conexao.
+ */
+export async function repararContatosLid() {
+  const suspeitos = leadRepo.suspeitosDeLid();
+  let corrigidos = 0;
+  for (const lead of suspeitos) {
+    try {
+      const jid = await whatsapp.consultarNumero(lead.telefone_e164);
+      if (jid) {
+        leadRepo.atualizar(lead.id, { wa_jid: jid }); // era telefone de verdade
+      } else {
+        leadRepo.converterParaLid(lead);
+        corrigidos += 1;
+      }
+    } catch {
+      /* consulta falhou: tenta de novo na proxima conexao */
+    }
+  }
+  if (corrigidos) {
+    logger.ok('inbox', `${corrigidos} contato(s) com LID gravado como telefone foram corrigidos.`);
+    bus.emit(EVENTOS.STATS, {});
+  }
 }
 
 async function processar(msg) {
@@ -204,7 +270,16 @@ export function iniciarInbound() {
     // fila implicita: cada mensagem e processada de forma independente
     processar(msg);
   });
+  whatsapp.on('numeroCompartilhado', vincularNumero);
+
+  let reparado = false;
+  whatsapp.on('status', ({ conectado }) => {
+    if (!conectado || reparado) return;
+    reparado = true;
+    // espera a sessao assentar antes de consultar numeros
+    setTimeout(() => repararContatosLid().catch(() => {}), 5000);
+  });
   logger.info('inbox', 'Monitor de respostas ativo (analise sim, resposta automatica nao).');
 }
 
-export default { iniciarInbound };
+export default { iniciarInbound, vincularNumero, repararContatosLid };

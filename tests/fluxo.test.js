@@ -32,7 +32,8 @@ const messageRepo = await import('../server/repositories/messageRepo.js');
 const settingsRepo = await import('../server/repositories/settingsRepo.js');
 const { default: whatsapp } = await import('../server/services/whatsapp/WhatsAppService.js');
 const { default: campaignRunner } = await import('../server/services/CampaignRunner.js');
-const { iniciarInbound } = await import('../server/services/InboundHandler.js');
+const { iniciarInbound, vincularNumero, repararContatosLid } = await import('../server/services/InboundHandler.js');
+const { default: MessageService } = await import('../server/services/MessageService.js');
 const { default: LabelService } = await import('../server/services/whatsapp/LabelService.js');
 const { classificarHeuristico } = await import('../server/services/ai/AIService.js');
 const { saudacaoDinamica } = await import('../server/utils/greeting.js');
@@ -52,6 +53,7 @@ class FakeProvider extends EventEmitter {
     this.suportaEtiquetas = true;
     this.etiquetas = new Map();
     this.chatsEtiquetados = new Map(); // jid -> Set(labelId)
+    this.semWhatsApp = new Set(); // numeros que nao existem no WhatsApp
   }
   listarEtiquetas() {
     return [...this.etiquetas.values()];
@@ -79,7 +81,10 @@ class FakeProvider extends EventEmitter {
     this.emit('status', { status: 'DESCONECTADO' });
   }
   async existeNoWhatsApp(tel) {
-    return `${tel}@s.whatsapp.net`;
+    return this.semWhatsApp.has(String(tel)) ? null : `${tel}@s.whatsapp.net`;
+  }
+  async consultarNumero(tel) {
+    return this.existeNoWhatsApp(tel);
   }
   async enviarTexto(tel, texto) {
     if (this.falharProximo) {
@@ -87,7 +92,13 @@ class FakeProvider extends EventEmitter {
       throw new Error('Connection Closed');
     }
     this.enviadas.push({ tel, texto });
-    return { waId: `fake-${this.enviadas.length}`, jid: `${tel}@s.whatsapp.net` };
+    // destino pode ser telefone ou o endereco exato da conversa (xxx@lid)
+    const jid = String(tel).includes('@') ? tel : `${tel}@s.whatsapp.net`;
+    return { waId: `fake-${this.enviadas.length}`, jid };
+  }
+  receberDe({ jid, telefone = null, texto, pushName = 'Cliente' }) {
+    const lid = String(jid).endsWith('@lid') ? jid : null;
+    this.emit('mensagem', { telefone, jid, lid, texto, waId: `in-${Date.now()}-${Math.random()}`, pushName, timestamp: Date.now() });
   }
   receber(tel, texto) {
     this.emit('mensagem', { telefone: tel, texto, waId: `in-${Date.now()}-${Math.random()}`, pushName: 'Cliente', timestamp: Date.now() });
@@ -310,6 +321,74 @@ test('etiquetar no WhatsApp nunca derruba o fluxo quando falha', async () => {
   const r = await LabelService.aplicarNoLead(lead, 'INTERESSADO');
   assert.equal(r.aplicada, false, 'sem conexao nao aplica');
   assert.ok(r.motivo, 'e explica o porque, sem lancar excecao');
+});
+
+/* ---------------------------------------------------------- LID do WhatsApp */
+
+test('conversa que chega por LID vira lead sem telefone e a resposta vai para o LID', async () => {
+  await whatsapp.conectar();
+  const lid = '264514553557138@lid';
+
+  fake.receberDe({ jid: lid, texto: 'oi, quero saber mais', pushName: 'Rick' });
+  await esperar(900);
+
+  const lead = leadRepo.porWaJid(lid);
+  assert.ok(lead, 'o lead precisa ser criado a partir do LID');
+  assert.equal(lead.telefone_e164, null, 'os digitos do LID nunca podem virar telefone');
+  assert.equal(lead.nome_estabelecimento, 'Rick');
+
+  const antes = fake.enviadas.length;
+  await MessageService.enviar({ lead, texto: 'Oi Rick, tudo bem?', autor: 'OPERADOR' });
+  assert.equal(fake.enviadas.length, antes + 1);
+  assert.equal(fake.enviadas.at(-1).tel, lid, 'a resposta precisa ir para o endereco exato da conversa');
+
+  // segunda mensagem da mesma pessoa cai no mesmo lead
+  fake.receberDe({ jid: lid, texto: 'e o preco?', pushName: 'Rick' });
+  await esperar(900);
+  assert.equal(all('SELECT COUNT(*) AS n FROM leads WHERE wa_jid = ?', lid)[0].n, 1);
+});
+
+test('resposta por LID com numero informado cai no lead que foi prospectado', async () => {
+  await whatsapp.conectar();
+  const { lead: prospectado } = leadRepo.criarOuEnriquecer({ nome_estabelecimento: 'Clinica LID', telefone: '16997771234' });
+  const totalAntes = all('SELECT COUNT(*) AS n FROM leads')[0].n;
+
+  fake.receberDe({ jid: '998877665544332@lid', telefone: '5516997771234', texto: 'pode mandar o modelo' });
+  await esperar(900);
+
+  assert.equal(all('SELECT COUNT(*) AS n FROM leads')[0].n, totalAntes, 'nao pode criar lead duplicado');
+  const atualizado = leadRepo.porId(prospectado.id);
+  assert.equal(atualizado.respondeu, 1);
+  assert.equal(atualizado.wa_jid, '998877665544332@lid', 'a conversa passa a responder pelo LID');
+});
+
+test('quando o WhatsApp revela o numero, a conversa por LID se junta ao lead do telefone', async () => {
+  const { lead: doTelefone } = leadRepo.criarOuEnriquecer({ nome_estabelecimento: 'Padaria Unir', telefone: '16996665555' });
+  const doLid = leadRepo.criarDeWhatsApp({ nome: 'Contato do WhatsApp', wa_jid: '112233445566778@lid' });
+  messageRepo.registrar({ lead_id: doLid.id, direcao: 'IN', corpo: 'tenho interesse', status: 'RECEBIDA', autor: 'CLIENTE' });
+
+  vincularNumero({ lid: '112233445566778@lid', telefone: '5516996665555' });
+
+  assert.equal(leadRepo.porId(doLid.id), undefined, 'o lead duplicado do LID some');
+  const unido = leadRepo.porId(doTelefone.id);
+  assert.equal(unido.wa_jid, '112233445566778@lid');
+  assert.equal(unido.respondeu, 1);
+  assert.equal(messageRepo.doLead(unido.id).filter((m) => m.direcao === 'IN').length, 1, 'a mensagem veio junto');
+});
+
+test('lead antigo com LID gravado como telefone e corrigido ao conectar', async () => {
+  await whatsapp.conectar();
+  const falso = '264500000000001';
+  fake.semWhatsApp.add(falso);
+  const { lead } = leadRepo.criarOuEnriquecer({ nome_estabelecimento: `+${falso}`, telefone: falso }, 'WHATSAPP_INBOUND');
+  assert.equal(lead.telefone_e164, falso);
+
+  await repararContatosLid();
+
+  const corrigido = leadRepo.porId(lead.id);
+  assert.equal(corrigido.telefone_e164, null);
+  assert.equal(corrigido.wa_jid, `${falso}@lid`);
+  assert.equal(corrigido.nome_estabelecimento, 'Contato do WhatsApp', 'nome que era so o numero e trocado');
 });
 
 test('resposta automatica nao pode ser ligada nem pela API de settings', () => {

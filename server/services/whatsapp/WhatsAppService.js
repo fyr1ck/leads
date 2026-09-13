@@ -54,6 +54,7 @@ export class WhatsAppService extends EventEmitter {
     this.provider.on('mensagem', (msg) => this.emit('mensagem', msg));
 
     this.provider.on('etiquetas', (lista) => this.emit('etiquetas', lista));
+    this.provider.on('numeroCompartilhado', (dados) => this.emit('numeroCompartilhado', dados));
   }
 
   estado() {
@@ -111,13 +112,26 @@ export class WhatsAppService extends EventEmitter {
     return this.estado();
   }
 
-  async enviarTexto(telefoneE164, texto) {
+  /** @param destino telefone E.164 OU endereco exato da conversa (xxx@lid, xxx@s.whatsapp.net) */
+  async enviarTexto(destino, texto) {
     if (!this.conectado) throw new AppError('WhatsApp not connected', 409);
-    return this.provider.enviarTexto(telefoneE164, texto);
+    return this.provider.enviarTexto(destino, texto);
   }
 
   async existeNoWhatsApp(telefoneE164) {
     return this.provider.existeNoWhatsApp(telefoneE164);
+  }
+
+  /** Como existeNoWhatsApp, mas lanca se a consulta falhar (em vez de devolver null). */
+  async consultarNumero(telefoneE164) {
+    if (typeof this.provider.consultarNumero === 'function') return this.provider.consultarNumero(telefoneE164);
+    return this.provider.existeNoWhatsApp(telefoneE164);
+  }
+
+  /** Destino -> JID. Endereco de conversa passa direto; telefone precisa existir. */
+  async _jidDe(destino) {
+    if (String(destino || '').includes('@')) return destino;
+    return this.existeNoWhatsApp(destino);
   }
 
   /* ------------------------------------------------ etiquetas do WhatsApp */
@@ -137,16 +151,18 @@ export class WhatsAppService extends EventEmitter {
     return this.provider.criarEtiqueta(dados);
   }
 
-  async aplicarEtiquetaNoChat(telefoneE164, labelId) {
+  async aplicarEtiquetaNoChat(destino, labelId) {
     if (!this.suportaEtiquetas || !this.conectado) return false;
-    const jid = (await this.existeNoWhatsApp(telefoneE164)) || `${String(telefoneE164).replace(/\D/g, '')}@s.whatsapp.net`;
+    const jid = await this._jidDe(destino);
+    if (!jid) return false; // numero sem WhatsApp: nao ha conversa para etiquetar
     await this.provider.aplicarEtiquetaNoChat(jid, labelId);
     return true;
   }
 
-  async removerEtiquetaDoChat(telefoneE164, labelId) {
+  async removerEtiquetaDoChat(destino, labelId) {
     if (!this.suportaEtiquetas || !this.conectado) return false;
-    const jid = (await this.existeNoWhatsApp(telefoneE164)) || `${String(telefoneE164).replace(/\D/g, '')}@s.whatsapp.net`;
+    const jid = await this._jidDe(destino);
+    if (!jid) return false;
     await this.provider.removerEtiquetaDoChat(jid, labelId);
     return true;
   }

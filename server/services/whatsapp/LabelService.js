@@ -132,14 +132,15 @@ function hash(texto) {
  */
 export async function aplicarNoLead(lead, novoSlug, antigoSlug = null) {
   if (!ligado() || !whatsapp.suportaEtiquetas || !whatsapp.conectado) return { aplicada: false, motivo: 'desligado' };
-  if (!lead?.telefone_e164 || !novoSlug) return { aplicada: false, motivo: 'sem telefone ou etiqueta' };
+  const destino = lead?.wa_jid || lead?.telefone_e164; // conversa exata (LID) ou telefone
+  if (!destino || !novoSlug) return { aplicada: false, motivo: 'sem conversa ou etiqueta' };
   if (novoSlug === antigoSlug) return { aplicada: false, motivo: 'sem mudanca' };
 
   try {
     if (antigoSlug) {
       const antiga = get('SELECT wa_label_id FROM tags WHERE slug = ?', antigoSlug);
       if (antiga?.wa_label_id) {
-        await whatsapp.removerEtiquetaDoChat(lead.telefone_e164, antiga.wa_label_id).catch(() => {});
+        await whatsapp.removerEtiquetaDoChat(destino, antiga.wa_label_id).catch(() => {});
       }
     }
 
@@ -148,7 +149,8 @@ export async function aplicarNoLead(lead, novoSlug, antigoSlug = null) {
       return { aplicada: false, motivo: 'etiqueta ainda nao sincronizada com o WhatsApp' };
     }
 
-    await whatsapp.aplicarEtiquetaNoChat(lead.telefone_e164, nova.wa_label_id);
+    const aplicou = await whatsapp.aplicarEtiquetaNoChat(destino, nova.wa_label_id);
+    if (!aplicou) return { aplicada: false, motivo: 'conversa nao encontrada no WhatsApp' };
     logger.info('etiquetas', `"${nova.nome}" aplicada no WhatsApp de ${lead.nome_estabelecimento}.`);
     return { aplicada: true, wa_label_id: nova.wa_label_id };
   } catch (err) {

@@ -18,7 +18,10 @@ import { AppError, mensagemAmigavel } from '../utils/errors.js';
 export const MessageService = {
   async enviar({ lead, texto, campanha = null, autor = 'OPERADOR', removerDaProspeccao }) {
     if (!lead) throw new AppError('Lead invalido.', 400);
-    if (!lead.telefone_e164) throw new AppError('Esse lead nao tem telefone valido para envio.', 400);
+    // Conversa ja existente: responde no endereco exato de onde ela veio
+    // (inclusive LID). Lead novo: vai pelo telefone, conferido no WhatsApp.
+    const destino = lead.wa_jid || lead.telefone_e164;
+    if (!destino) throw new AppError('Esse lead nao tem telefone nem conversa de WhatsApp para responder.', 400);
     const corpo = String(texto || '').trim();
     if (!corpo) throw new AppError('A mensagem esta vazia.', 400);
 
@@ -33,7 +36,10 @@ export const MessageService = {
     }
 
     try {
-      const { waId } = await whatsapp.enviarTexto(lead.telefone_e164, corpo);
+      const { waId, jid } = await whatsapp.enviarTexto(destino, corpo);
+
+      // guarda o endereco confirmado: os proximos envios nao precisam consultar
+      if (jid && lead.wa_jid !== jid) leadRepo.atualizar(lead.id, { wa_jid: jid });
 
       const msg = messageRepo.registrar({
         lead_id: lead.id,

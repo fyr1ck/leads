@@ -108,8 +108,11 @@ export function migrar() {
     proxima_acao: 'TEXT',
     proximo_followup: 'TEXT',
     search_id: 'INTEGER',
-    descoberto_em: 'TEXT'
+    descoberto_em: 'TEXT',
+    // endereco exato da conversa no WhatsApp (xxx@s.whatsapp.net ou xxx@lid)
+    wa_jid: 'TEXT'
   });
+  db.exec('CREATE INDEX IF NOT EXISTS ix_leads_wa_jid ON leads(wa_jid)');
   // id da etiqueta correspondente no WhatsApp Business (sincronizacao)
   garantirColunas('tags', { wa_label_id: 'TEXT', wa_cor: 'INTEGER' });
   garantirColunas('campaigns', {
