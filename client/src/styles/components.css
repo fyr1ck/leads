@@ -36,9 +36,10 @@
   flex-direction: column;
   gap: 14px;
   padding: 18px 14px;
-  background: linear-gradient(180deg, rgba(13, 18, 27, 0.96), rgba(7, 10, 15, 0.98));
+  /* sem backdrop-filter: em elemento fixo, a GPU (ex.: Radeon + Direct3D11) pinta
+     blocos pretos e desloca a camada durante a rolagem */
+  background: linear-gradient(180deg, #0d121b, #070a0f);
   border-right: 1px solid var(--border);
-  backdrop-filter: blur(var(--glass-blur));
   z-index: 30;
 }
 
@@ -157,8 +158,7 @@
   align-items: center;
   gap: 14px;
   padding: 12px 26px;
-  background: rgba(7, 10, 15, 0.82);
-  backdrop-filter: blur(var(--glass-blur));
+  background: rgba(7, 10, 15, 0.97); /* sem desfoque: mesmo motivo da sidebar */
   border-bottom: 1px solid var(--border);
 }
 .topbar h1 { font-size: 18px; }
@@ -203,7 +203,6 @@
   border-radius: var(--radius);
   border: 1px solid var(--border);
   background: var(--panel);
-  backdrop-filter: blur(var(--glass-blur));
   box-shadow: var(--shadow);
   overflow: hidden;
 }
@@ -406,8 +405,7 @@ table.tabela thead th {
   letter-spacing: 0.09em;
   text-transform: uppercase;
   color: var(--muted);
-  background: rgba(11, 16, 24, 0.97);
-  backdrop-filter: blur(8px);
+  background: rgb(11, 16, 24);
   border-bottom: 1px solid var(--border);
   white-space: nowrap;
 }
@@ -623,14 +621,25 @@ table.tabela tbody tr:last-child td { border-bottom: 0; }
 .kanban-card:active { cursor: grabbing; }
 
 /* ---------------------------------------------------- inbox / conversas */
+/*
+ * A caixa de conversas ocupa exatamente a altura da tela: quem rola sao a lista
+ * de conversas e as mensagens, por dentro - a pagina fica parada, como no
+ * WhatsApp. Antes ela crescia com as mensagens e a pagina inteira rolava.
+ */
 .inbox {
   display: grid;
   grid-template-columns: 300px 1fr 318px;
+  grid-template-rows: minmax(0, 1fr);
   gap: 14px;
-  min-height: calc(100vh - var(--topbar) - 80px);
+  height: calc(100vh - var(--topbar) - 64px);
+  height: calc(100dvh - var(--topbar) - 64px);
+  min-height: 460px;
 }
-.conv-list { display: flex; flex-direction: column; overflow: hidden; }
-.conv-scroll { overflow-y: auto; display: flex; flex-direction: column; }
+.inbox > .card { display: flex; flex-direction: column; min-height: 0; }
+.inbox > .card > .card-body { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+.conv-list { overflow: hidden; }
+.conv-scroll { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; }
+.lead-panel > .card-body { overflow-y: auto; }
 .conv-item {
   display: flex;
   gap: 11px;
@@ -662,8 +671,10 @@ table.tabela tbody tr:last-child td { border-bottom: 0; }
 
 .chat { display: flex; flex-direction: column; overflow: hidden; }
 .chat-body {
-  flex: 1;
+  flex: 1 1 auto;
+  min-height: 140px;
   overflow-y: auto;
+  overscroll-behavior: contain; /* chegar no fim da conversa nao arrasta a pagina */
   padding: 18px;
   display: flex;
   flex-direction: column;
@@ -696,7 +707,17 @@ table.tabela tbody tr:last-child td { border-bottom: 0; }
 }
 .bubble.falhou { border-color: rgba(239, 68, 68, 0.4); background: var(--erro-soft); }
 .bubble-meta { margin-top: 5px; font-size: 10.5px; color: var(--dim); display: flex; gap: 6px; align-items: center; }
+/* copiloto + sugestao: nunca espremem a conversa - rolam na propria area */
+.chat-assistente {
+  flex: 0 1 auto;
+  max-height: 42%;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-top: 10px;
+}
+.chat-assistente:empty { display: none; }
 .chat-compose {
+  flex: none;
   border-top: 1px solid var(--border);
   padding: 12px;
   display: flex;
@@ -870,8 +891,10 @@ table.tabela tbody tr:last-child td { border-bottom: 0; }
   .content { padding: 16px 14px 34px; }
   .topbar { padding: 10px 14px; }
   .grid-4, .grid-3, .grid-2 { grid-template-columns: 1fr; }
-  .inbox { grid-template-columns: 1fr; }
+  .inbox { grid-template-columns: 1fr; height: calc(100dvh - var(--topbar) - 50px); }
   .inbox .conv-list.escondida { display: none; }
+  /* no celular: sem conversa aberta mostra so a lista; com conversa, so o chat */
+  .inbox:not(.com-lead) .chat { display: none; }
   .toast-stack { right: 10px; left: 10px; max-width: none; }
 }
 
@@ -967,8 +990,7 @@ table.tabela tbody tr:last-child td { border-bottom: 0; }
   padding: 11px 15px;
   border-radius: var(--radius-pill);
   border: 1px solid var(--border-accent);
-  background: rgba(14, 20, 30, 0.97);
-  backdrop-filter: blur(var(--glass-blur));
+  background: rgb(14, 20, 30);
   box-shadow: var(--shadow-lg);
   animation: fadeUp var(--normal) both;
 }

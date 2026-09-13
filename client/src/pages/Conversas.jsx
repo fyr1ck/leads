@@ -20,7 +20,7 @@ export default function Conversas() {
   const [aberta, setAberta] = useState(null);
   const [texto, setTexto] = useState('');
   const [enviando, setEnviando] = useState(false);
-  const fimChat = useRef(null);
+  const corpoChat = useRef(null);
 
   const carregarLista = useCallback(async () => {
     try {
@@ -55,8 +55,11 @@ export default function Conversas() {
     else setAberta(null);
   }, [leadId, carregarConversa]);
 
+  // Rola SO a lista de mensagens ate o fim. scrollIntoView rolava tambem a
+  // pagina inteira, e a tela dava tranco se voce estivesse rolando na hora.
   useEffect(() => {
-    fimChat.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+    const el = corpoChat.current;
+    if (el) el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
   }, [aberta?.mensagens?.length]);
 
   // tempo real: nova resposta ou nova analise atualizam a tela na hora
@@ -110,7 +113,7 @@ export default function Conversas() {
   const pot = rotuloPotencial(lead?.score);
 
   return (
-    <div className="inbox">
+    <div className={`inbox ${leadId ? 'com-lead' : ''}`}>
       {/* ------------------------------------------------ lista */}
       <Card className={`conv-list ${leadId ? 'escondida' : ''}`} bodyClass="flush">
         <div style={{ padding: 12, borderBottom: '1px solid var(--border)' }}>
@@ -190,7 +193,7 @@ export default function Conversas() {
               </div>
             </header>
 
-            <div className="chat-body">
+            <div className="chat-body" ref={corpoChat}>
               {aberta.mensagens.length === 0 && <Vazio titulo="Sem mensagens" texto="Nada foi trocado com este lead ainda." />}
               {aberta.mensagens.map((m) => (
                 <div key={m.id} className={`bubble ${m.direcao === 'OUT' ? 'out' : 'in'} ${m.status === 'FALHOU' ? 'falhou' : ''}`}>
@@ -202,9 +205,10 @@ export default function Conversas() {
                   </div>
                 </div>
               ))}
-              <div ref={fimChat} />
             </div>
 
+            {/* copiloto + sugestao: area propria com rolagem, para nunca espremer a conversa */}
+            <div className="chat-assistente">
             {/* copiloto de vendas (spec 63) */}
             <div style={{ margin: '0 12px 10px' }}>
               <Copiloto leadId={lead.id} onUsarResposta={setTexto} />
@@ -233,6 +237,7 @@ export default function Conversas() {
                 </div>
               </div>
             )}
+            </div>
 
             <div className="chat-compose">
               <textarea
