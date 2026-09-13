@@ -43,6 +43,11 @@ export const config = {
     // modelo de geracao e responde mais rapido.
     modelAnalise: process.env.GROQ_MODEL_ANALISE || process.env.GROQ_MODEL || 'openai/gpt-oss-20b',
     temperature: num(process.env.GROQ_TEMPERATURE, 0.6),
+    // gpt-oss "pensa" antes de responder e isso consome tokens de saida.
+    // low = raciocinio curto: resposta inteira e menos gasto do limite por minuto.
+    reasoningEffort: ['low', 'medium', 'high'].includes(process.env.GROQ_REASONING_EFFORT)
+      ? process.env.GROQ_REASONING_EFFORT
+      : 'low',
     baseUrl: 'https://api.groq.com/openai/v1'
   },
   whatsapp: {

@@ -13,6 +13,20 @@ export const naoEncontrado = (o = 'Registro') => new AppError(`${o} nao encontra
 /** Traduz erro tecnico em mensagem que o operador entende (spec 46). */
 export function mensagemAmigavel(err) {
   const raw = String(err?.message || err || '');
+
+  // Erros da Groq decidem pelo status HTTP real, nunca por numero solto no
+  // texto: "Used 7401 tokens" contem "401" e aparecia como "chave invalida".
+  const statusGroq = err?.groqStatus;
+  if (statusGroq === 429 || /rate limit|tokens per minute|requests per minute/i.test(raw)) {
+    const seg = err?.esperaMs ? Math.ceil(err.esperaMs / 1000) : null;
+    return `A IA atingiu o limite de uso por minuto do plano gratuito da Groq. ${
+      seg ? `Tente de novo em ${seg}s.` : 'Aguarde cerca de um minuto e tente de novo.'
+    }`;
+  }
+  if (statusGroq === 401 || statusGroq === 403 || /invalid[_ ]api[_ ]key|GROQ_API_KEY nao configurada/i.test(raw)) {
+    return 'A Groq recusou a chave. Confira a GROQ_API_KEY no arquivo .env.';
+  }
+
   if (/not connected|Connection Closed|no session|precondition|not open/i.test(raw)) {
     return 'Nao foi possivel enviar a mensagem. O WhatsApp pode estar desconectado.';
   }
@@ -21,12 +35,6 @@ export function mensagemAmigavel(err) {
   }
   if (/timed? ?out|ETIMEDOUT|ENOTFOUND|ECONNREFUSED|fetch failed/i.test(raw)) {
     return 'Falha de conexao com o servico. Verifique a internet e tente novamente.';
-  }
-  if (/GROQ_API_KEY|401|invalid[_ ]api[_ ]key/i.test(raw)) {
-    return 'A Groq recusou a requisicao. Confira a GROQ_API_KEY no arquivo .env.';
-  }
-  if (/429|rate limit/i.test(raw)) {
-    return 'Limite de requisicoes da IA atingido. Aguarde alguns segundos e tente de novo.';
   }
   if (/UNIQUE constraint/i.test(raw)) return 'Esse registro ja existe no banco.';
   return raw || 'Erro inesperado.';

@@ -215,7 +215,7 @@ export const AIService = {
     }
     try {
       const { sistema, usuario } = promptPrimeiraMensagem(lead);
-      const { conteudo, modelo } = await completar({ sistema, usuario, maxTokens: 450 });
+      const { conteudo, modelo } = await completar({ sistema, usuario, maxTokens: 600 });
       const limpa = limparMensagem(conteudo, { permitirLinks: Boolean(config.operacao.linkDemonstracao) });
       if (!limpa || limpa.length < 40 || temPlaceholder(limpa)) {
         logger.warn('ia', 'Mensagem gerada invalida. Usando a abordagem padrao da Skill.');
@@ -247,7 +247,7 @@ export const AIService = {
         usuario,
         esquema: ESQUEMA_ANALISE,
         temperatura: 0.2,
-        maxTokens: 600,
+        maxTokens: 800,
         modelo: config.groq.modelAnalise
       });
       const bruto = extrairJson(conteudo);
@@ -293,8 +293,11 @@ export const AIService = {
       usuario,
       esquema: ESQUEMA_COPILOTO,
       temperatura: 0.3,
-      maxTokens: 700,
-      modelo: config.groq.modelAnalise
+      maxTokens: 900,
+      modelo: config.groq.modelAnalise,
+      // a pessoa esta olhando: se o limite por minuto estiver cheio, avisa o
+      // tempo em vez de deixar o botao girando por minutos
+      interativo: true
     });
     const bruto = extrairJson(conteudo) || {};
 
@@ -328,7 +331,7 @@ export const AIService = {
 
     try {
       const { sistema, usuario } = promptFollowUp({ lead, historico, dias: diasSemResposta, memoria });
-      const { conteudo, modelo } = await completar({ sistema, usuario, maxTokens: 350 });
+      const { conteudo, modelo } = await completar({ sistema, usuario, maxTokens: 500 });
       const limpa = limparMensagem(conteudo, { permitirLinks: Boolean(config.operacao.linkDemonstracao) });
       if (!limpa || temPlaceholder(limpa)) throw new Error('Mensagem de follow-up invalida.');
       return { mensagem: limpa, origem: 'GROQ', modelo };
@@ -348,7 +351,7 @@ export const AIService = {
       return { sugestao: null, origem: 'INDISPONIVEL', motivo: 'GROQ_API_KEY nao configurada.' };
     }
     const { sistema, usuario } = promptProximoPasso({ lead, historico });
-    const { conteudo, modelo } = await completar({ sistema, usuario, maxTokens: 350 });
+    const { conteudo, modelo } = await completar({ sistema, usuario, maxTokens: 500, interativo: true });
     return { sugestao: limparMensagem(conteudo, { permitirLinks: true }), origem: 'GROQ', modelo };
   }
 };
