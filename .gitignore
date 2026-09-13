@@ -14,3 +14,6 @@ client/dist/
 npm-debug.log*
 .DS_Store
 Thumbs.db
+
+# backups automaticos da Skill (o git ja guarda o historico)
+skills/backups/

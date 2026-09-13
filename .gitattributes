@@ -1,0 +1,5 @@
+# scripts que rodam no Linux (VPS) precisam de LF, senao quebram com $'\r'
+*.sh      text eol=lf
+*.service text eol=lf
+# scripts do Windows
+*.bat     text eol=crlf
