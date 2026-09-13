@@ -20,30 +20,103 @@ Máquina virtual real, de graça **para sempre** (não é trial de 12 meses).
 O que este projeto consome: ~150 MB de RAM e quase nada de CPU. Cabe folgado
 até na menor máquina.
 
-**Passo a passo**
+### 1. Criar a conta
 
-1. Crie a conta em <https://cloud.oracle.com> (pede cartão só para validar
-   identidade — a conta Always Free não cobra).
-2. *Compute → Instances → Create Instance*
-   - Image: **Ubuntu 24.04**
-   - Shape: **VM.Standard.A1.Flex** (ARM, 1–4 OCPU) ou **VM.Standard.E2.1.Micro**
-   - Marque que é **Always Free eligible**
-   - Baixe a chave SSH
-3. *Networking → VCN → Security List* → libere a porta **443** (e 80 se for usar
-   Caddy). Não precisa abrir a 3000 se usar Cloudflare Tunnel.
-4. Conecte e instale:
+1. Acesse <https://signup.cloud.oracle.com>.
+2. País **Brazil**, nome e e-mail → confirme o e-mail.
+3. Crie a senha da conta Oracle e o *Cloud Account Name* (ex.: `henvix`).
+4. **Home Region** — atenção, não dá para trocar depois e o Always Free só vale
+   nela. Use **Brazil East (Sao Paulo)**.
+5. Endereço, telefone e cartão. O cartão é só verificação de identidade (pode
+   aparecer uma pré-autorização pequena que volta). Conta Always Free não cobra
+   enquanto você não fizer upgrade manual para "Pay As You Go".
+6. Espere o e-mail "Your account is ready" (costuma levar de 5 a 30 minutos).
+
+### 2. Criar a VPS
+
+No console, menu **☰ → Compute → Instances → Create instance**:
+
+| Campo | O que escolher |
+| --- | --- |
+| Name | `henvix` |
+| Image | *Change image* → **Canonical Ubuntu 24.04** |
+| Shape | *Change shape* → **Ampere → VM.Standard.A1.Flex**, 1 OCPU e 6 GB |
+| Networking | deixe *Create new virtual cloud network* e **Assign a public IPv4 address** marcado |
+| Add SSH keys | **Generate a key pair for me** → clique em **Save private key** (guarde esse arquivo!) |
+| Boot volume | deixe o padrão |
+
+Clique **Create**. Quando ficar verde (*Running*), copie o **Public IP address**.
+
+> Se aparecer **"Out of capacity"** na shape ARM: *Change shape* →
+> **Specialty and previous generation → VM.Standard.E2.1.Micro** (também
+> Always Free). O instalador cria swap para o build caber em 1 GB.
+
+Procure o selo **Always Free-eligible** ao lado da shape antes de criar.
+
+### 3. Entrar na VPS pelo Windows
+
+O Windows 10/11 já vem com SSH. Abra o **PowerShell**:
+
+```powershell
+# o Windows recusa chave com permissao aberta - trava para so voce ler
+icacls "$HOME\Downloads\ssh-key-*.key" /inheritance:r
+icacls "$HOME\Downloads\ssh-key-*.key" /grant:r "$($env:USERNAME):R"
+
+ssh -i "$HOME\Downloads\ssh-key-AAAA-MM-DD.key" ubuntu@SEU_IP
+```
+
+Troque o nome do arquivo e o IP pelos seus. Na primeira vez ele pergunta
+*"Are you sure you want to continue connecting?"* → digite `yes`.
+
+### 4. Instalar o painel
+
+Já dentro da VPS:
 
 ```bash
-ssh -i sua-chave.key ubuntu@SEU_IP
 sudo apt update && sudo apt install -y git
 git clone https://github.com/fyr1ck/leads.git
 sudo bash leads/deploy/instalar-vps.sh
-sudo nano /opt/henvix/.env      # GROQ_API_KEY e USUARIOS_PERMITIDOS
-sudo systemctl start henvix
-sudo journalctl -u henvix -f
 ```
 
-5. Publique com HTTPS (veja abaixo), abra o painel, crie a senha e leia o QR.
+Configure a chave da Groq e os e-mails:
+
+```bash
+sudo nano /opt/henvix/.env
+# preencha GROQ_API_KEY e confira USUARIOS_PERMITIDOS
+# salvar: Ctrl+O, Enter  ·  sair: Ctrl+X
+```
+
+### 5. Criar as senhas (pelo SSH)
+
+Na VPS o painel é acessado pela internet, então **a senha do primeiro acesso não
+pode ser criada pelo navegador** — senão qualquer um que chegasse na URL antes
+de vocês criaria. Quem tem SSH é o dono, então é por aqui:
+
+```bash
+cd /opt/henvix
+sudo -u henvix node server/scripts/definirSenha.js joao.jhcc31@gmail.com
+sudo -u henvix node server/scripts/definirSenha.js castrinvini@gmail.com
+```
+
+A senha é digitada sem aparecer na tela e não fica no histórico.
+
+### 6. Ligar
+
+```bash
+sudo systemctl start henvix
+sudo journalctl -u henvix -f     # Ctrl+C sai do log (o painel continua rodando)
+```
+
+O banner com `Database: ONLINE` e `Groq: CONNECTED` significa que subiu. A partir
+daqui ele liga sozinho se a VPS reiniciar e volta sozinho se cair.
+
+### 7. Publicar com HTTPS e ler o QR
+
+Siga **Publicar com HTTPS** logo abaixo, abra o endereço, entre com a senha e
+leia o QR Code do WhatsApp.
+
+> ⚠️ **Desligue o painel do seu PC antes.** Dois servidores com o mesmo
+> WhatsApp se derrubam em looping (erro 440).
 
 **Detalhes honestos:** a capacidade ARM às vezes fica esgotada na região — se
 der "out of capacity", tente outra região ou use a shape AMD micro. A Oracle
@@ -74,7 +147,9 @@ se o painel estiver no seu PC de casa.
 
 ```bash
 # na maquina onde o painel roda
-curl -L https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 -o cloudflared
+# VPS ARM (A1.Flex): cloudflared-linux-arm64  ·  VPS AMD/Intel: cloudflared-linux-amd64
+ARQ=$(dpkg --print-architecture)   # arm64 ou amd64
+curl -L "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-$ARQ" -o cloudflared
 sudo install cloudflared /usr/local/bin/
 cloudflared tunnel login
 cloudflared tunnel create henvix
@@ -109,10 +184,10 @@ O Caddy tira o certificado Let's Encrypt sozinho e renova sem você mexer.
 1. `COOKIE_SEGURO=1` no `.env` (o instalador já deixa assim) — o cookie de
    sessão para de trafegar em conexão aberta.
 2. `EXIGIR_LOGIN=1`, sempre.
-3. **Troque a senha.** Exposto na internet, o login é a única barreira entre o
-   mundo e o seu WhatsApp + base de clientes:
+3. **Senha forte e individual.** Exposto na internet, o login é a única barreira
+   entre o mundo e o seu WhatsApp + base de clientes. Para trocar, na VPS:
    ```bash
-   npm run auth:reset -- seu@email.com
+   cd /opt/henvix && sudo -u henvix node server/scripts/definirSenha.js seu@email.com
    ```
 4. **Uma instância só.** Duas brigam pela mesma sessão do WhatsApp (erro 440) e
    se derrubam em looping.
@@ -124,9 +199,10 @@ O Caddy tira o certificado Let's Encrypt sozinho e renova sem você mexer.
 
 ```bash
 cd /opt/henvix
-sudo -u henvix git pull
-sudo -u henvix npm install --omit=dev
-sudo -u henvix npm run build
+sudo -u henvix -H git pull
+sudo -u henvix -H npm install --omit=dev
+sudo -u henvix -H npm install --prefix client
+sudo -u henvix -H npm run build
 sudo systemctl restart henvix
 ```
 

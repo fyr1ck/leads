@@ -25,6 +25,18 @@ azul "1/6  Pacotes base"
 apt-get update -qq
 apt-get install -y -qq curl git ca-certificates
 
+# Maquina de 1 GB (Oracle E2.1.Micro, Google e2-micro): o build do painel
+# estoura a memoria sem swap. 2 GB de swap resolvem.
+MEM_MB=$(awk '/MemTotal/ {print int($2/1024)}' /proc/meminfo)
+if [ "$MEM_MB" -lt 2000 ] && ! swapon --show | grep -q .; then
+  azul "     Memoria baixa (${MEM_MB} MB): criando 2 GB de swap"
+  fallocate -l 2G /swapfile || dd if=/dev/zero of=/swapfile bs=1M count=2048
+  chmod 600 /swapfile
+  mkswap /swapfile >/dev/null
+  swapon /swapfile
+  grep -q '/swapfile' /etc/fstab || echo '/swapfile none swap sw 0 0' >> /etc/fstab
+fi
+
 azul "2/6  Node.js ${NODE_MAJOR}"
 if ! command -v node >/dev/null || [ "$(node -p 'process.versions.node.split(".")[0]')" -lt "$NODE_MAJOR" ]; then
   curl -fsSL "https://deb.nodesource.com/setup_${NODE_MAJOR}.x" | bash -
@@ -74,10 +86,11 @@ ok ""
 ok "Instalado."
 echo
 echo "  1) Edite o .env:        sudo nano $DESTINO/.env"
-echo "  2) Suba o painel:       sudo systemctl start henvix"
-echo "  3) Acompanhe:           sudo journalctl -u henvix -f"
+echo "  2) Crie as senhas:      cd $DESTINO && sudo -u $USUARIO node server/scripts/definirSenha.js seu@email.com"
+echo "  3) Suba o painel:       sudo systemctl start henvix"
+echo "  4) Acompanhe:           sudo journalctl -u henvix -f"
 echo
 echo "  O painel responde na porta 3000. Publique com HTTPS usando"
 echo "  Cloudflare Tunnel (gratis) ou Caddy - veja deploy/README.md."
 echo
-echo "  Depois, abra o painel, crie a senha e leia o QR Code do WhatsApp."
+echo "  Depois, entre no painel e leia o QR Code do WhatsApp."

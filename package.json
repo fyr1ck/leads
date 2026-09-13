@@ -16,7 +16,8 @@
     "setup": "npm install && npm install --prefix client",
     "test": "node --test tests/*.test.js",
     "db:reset": "node server/scripts/resetDb.js",
-    "auth:reset": "node server/scripts/resetSenha.js"
+    "auth:reset": "node server/scripts/resetSenha.js",
+    "auth:senha": "node server/scripts/definirSenha.js"
   },
   "dependencies": {
     "@whiskeysockets/baileys": "6.7.24",

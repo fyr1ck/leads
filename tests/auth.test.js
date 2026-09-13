@@ -139,6 +139,25 @@ test('tirar um e-mail da lista corta o acesso dele', async () => {
   AuthService.semearUsuarios();
 });
 
+test('atras de proxy (Cloudflare Tunnel, Caddy) o visitante nao passa por local', async () => {
+  const { ehLocal } = await import('../server/middleware/auth.js');
+  const req = (ip, headers = {}) => ({ socket: { remoteAddress: ip }, headers });
+
+  // na propria maquina, sem proxy: local
+  assert.equal(ehLocal(req('127.0.0.1')), true);
+  assert.equal(ehLocal(req('::1')), true);
+  assert.equal(ehLocal(req('::ffff:127.0.0.1')), true);
+
+  // mesma origem de loopback, mas passou por proxy: NAO e local
+  assert.equal(ehLocal(req('127.0.0.1', { 'x-forwarded-for': '200.10.20.30' })), false);
+  assert.equal(ehLocal(req('127.0.0.1', { 'cf-connecting-ip': '200.10.20.30' })), false);
+  assert.equal(ehLocal(req('::1', { forwarded: 'for=200.10.20.30' })), false);
+  assert.equal(ehLocal(req('127.0.0.1', { 'x-real-ip': '200.10.20.30' })), false);
+
+  // IP de fora: nunca local
+  assert.equal(ehLocal(req('200.10.20.30')), false);
+});
+
 test.after(() => {
   try {
     fs.rmSync(tmp, { recursive: true, force: true });

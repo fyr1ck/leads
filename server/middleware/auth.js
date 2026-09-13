@@ -24,9 +24,21 @@ export function lerCookies(req, _res, next) {
 }
 
 /** A requisicao veio da propria maquina onde o painel roda? */
+/**
+ * A requisicao veio de verdade da propria maquina?
+ *
+ * Nao basta olhar o IP: atras de Cloudflare Tunnel, Caddy ou nginx rodando na
+ * mesma maquina, TODO visitante da internet chega pelo 127.0.0.1. Esses proxies
+ * sempre acrescentam cabecalhos de encaminhamento - entao so e local quem vem
+ * do loopback E sem nenhum desses cabecalhos.
+ */
+const CABECALHOS_DE_PROXY = ['x-forwarded-for', 'x-real-ip', 'forwarded', 'cf-connecting-ip', 'true-client-ip', 'via'];
+
 export function ehLocal(req) {
-  const ip = String(req.ip || req.socket?.remoteAddress || '');
-  return ip.includes('127.0.0.1') || ip.includes('::1') || ip === '::ffff:127.0.0.1';
+  const ip = String(req.socket?.remoteAddress || '');
+  const loopback = ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1';
+  if (!loopback) return false;
+  return !CABECALHOS_DE_PROXY.some((h) => req.headers?.[h]);
 }
 
 export const tokenDaRequisicao = (req) =>
