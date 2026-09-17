@@ -45,6 +45,53 @@
   50% { opacity: 1; }
 }
 
+/* ---------------------------------------------------- marca Henvixy */
+/* entra desfocada e "acende", como a estrela da logo */
+@keyframes logoIn {
+  from { opacity: 0; transform: scale(0.86); filter: blur(6px) drop-shadow(0 0 0 transparent); }
+  to { opacity: 1; transform: none; filter: blur(0) drop-shadow(0 0 7px var(--accent-glow)); }
+}
+/* respiro do brilho ciano em volta dos tracos */
+@keyframes logoGlow {
+  0%, 100% { filter: drop-shadow(0 0 5px rgba(34, 211, 238, 0.28)); }
+  50% { filter: drop-shadow(0 0 11px rgba(34, 211, 238, 0.6)); }
+}
+/* faixa de luz que atravessa a logo de tempos em tempos */
+@keyframes logoSheen {
+  0%, 62% { background-position: 160% 0; }
+  100% { background-position: -60% 0; }
+}
+/* aneis orbitais do fundo do login (a mesma elipse da logo) */
+@keyframes orbita {
+  from { transform: translate(-50%, -50%) rotate(-18deg); }
+  to { transform: translate(-50%, -50%) rotate(342deg); }
+}
+@keyframes auroraDrift {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
+  50% { transform: translate3d(3%, -4%, 0) scale(1.08); }
+}
+
+/* ---------------------------------------------------- navegacao */
+/* troca de pagina: o conteudo sobe em cascata */
+@keyframes pageIn {
+  from { opacity: 0; transform: translateY(14px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes indicadorIn {
+  from { transform: scaleY(0); opacity: 0; }
+  to { transform: scaleY(1); opacity: 1; }
+}
+@keyframes brilhoBotao {
+  from { transform: translateX(-130%) skewX(-20deg); }
+  to { transform: translateX(260%) skewX(-20deg); }
+}
+
+.content > * { animation: pageIn var(--slow) both; }
+.content > :nth-child(2) { animation-delay: 60ms; }
+.content > :nth-child(3) { animation-delay: 120ms; }
+.content > :nth-child(4) { animation-delay: 180ms; }
+.content > :nth-child(n + 5) { animation-delay: 230ms; }
+
 .anim-fade-up { animation: fadeUp var(--normal) both; }
 .anim-fade-in { animation: fadeIn var(--normal) both; }
 .anim-panel { animation: slideUpPanel var(--normal) both; }

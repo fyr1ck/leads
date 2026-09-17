@@ -3,6 +3,16 @@ import { createPortal } from 'react-dom';
 import { X, Inbox, CheckCircle2, AlertTriangle, Info, XCircle, MapPin, Lock } from 'lucide-react';
 import { numero } from '../lib/format.js';
 
+/* ------------------------------------------------------------------ marca */
+/** Logo da Henvixy (client/public/logo.png) com brilho que percorre so os tracos. */
+export function Logo({ className = '' }) {
+  return (
+    <span className={`brand-logo ${className}`} role="img" aria-label="Henvixy">
+      <img src="/logo.png" alt="" draggable="false" />
+    </span>
+  );
+}
+
 /* ------------------------------------------------------------------ numeros */
 /** Numero que "conta" ate o valor novo (spec 33). */
 export function AnimatedNumber({ valor = 0, duracao = 800, formatar = numero }) {

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Route, Routes, useLocation } from 'react-router-dom';
 import Sidebar from './components/Sidebar.jsx';
 import Topbar from './components/Topbar.jsx';
-import { Toasts } from './components/ui.jsx';
+import { Toasts, Logo } from './components/ui.jsx';
 import { useApp } from './state/AppContext.jsx';
 
 import Dashboard from './pages/Dashboard.jsx';
@@ -45,7 +45,7 @@ const TITULOS = {
   '/reativacao': { titulo: '♻️ Reativação', sub: 'Oportunidades que esfriaram e continuam valendo' },
   '/vendas': { titulo: 'Vendas / Financeiro', sub: 'Faturamento, recebimentos e pendências' },
   '/relatorios': { titulo: 'Relatórios', sub: 'Funil, campanhas e conversão' },
-  '/skill': { titulo: 'Skill Henvix', sub: 'As regras comerciais que a IA segue' }
+  '/skill': { titulo: 'Skill Henvixy', sub: 'As regras comerciais que a IA segue' }
 };
 
 export default function App() {
@@ -63,7 +63,7 @@ export default function App() {
     return (
       <div className="login-tela">
         <div className="center col gap-12">
-          <div className="brand-mark" style={{ width: 44, height: 44, fontSize: 19 }}>H</div>
+          <Logo className="grande" />
           <span className="fs-13 dim">Carregando o painel...</span>
         </div>
       </div>
@@ -72,14 +72,15 @@ export default function App() {
 
   if (!logado) return <Login onEntrou={entrar} />;
 
-  const info = TITULOS[pathname] || { titulo: 'Henvix', sub: null };
+  const info = TITULOS[pathname] || { titulo: 'Henvixy', sub: null };
 
   return (
     <div className="app">
       <Sidebar aberta={menuAberto} onNavegar={() => setMenuAberto(false)} />
       <div className="main">
         <Topbar titulo={info.titulo} subtitulo={info.sub} onMenu={() => setMenuAberto((v) => !v)} />
-        <main className="content">
+        {/* key: trocar de pagina remonta o conteudo e repete a entrada animada */}
+        <main className="content" key={pathname}>
           <Routes>
             <Route path="/" element={<Dashboard />} />
             <Route path="/oportunidades" element={<Oportunidades />} />

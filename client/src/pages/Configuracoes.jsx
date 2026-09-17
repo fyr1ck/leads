@@ -172,7 +172,7 @@ export default function Configuracoes() {
                 <span className="mono">{saude?.ia?.groq?.modelo || '—'}</span>
               </div>
               <div className="row-between fs-12 muted">
-                <span>Skill Henvix</span>
+                <span>Skill Henvixy</span>
                 <span>
                   {saude?.ia?.skill?.carregada
                     ? `carregada (${numero(saude.ia.skill.caracteres)} caracteres)`

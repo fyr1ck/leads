@@ -5,7 +5,7 @@ import {
   Globe, Recycle, Wallet, BarChart3, ScrollText, AlarmClock
 } from 'lucide-react';
 import { useApp } from '../state/AppContext.jsx';
-import { StatusDot } from './ui.jsx';
+import { StatusDot, Logo } from './ui.jsx';
 
 const GRUPOS = [
   {
@@ -48,7 +48,7 @@ const GRUPOS = [
     titulo: 'Sistema',
     itens: [
       { para: '/whatsapp', rotulo: 'WhatsApp', icone: Smartphone },
-      { para: '/skill', rotulo: 'Skill Henvix', icone: ScrollText },
+      { para: '/skill', rotulo: 'Skill Henvixy', icone: ScrollText },
       { para: '/configuracoes', rotulo: 'Configurações', icone: Settings }
     ]
   }
@@ -68,9 +68,9 @@ export default function Sidebar({ aberta, onNavegar }) {
   return (
     <aside className={`sidebar ${aberta ? 'aberta' : ''}`}>
       <div className="brand">
-        <div className="brand-mark">H</div>
+        <Logo />
         <div className="brand-text">
-          <strong>HENVIX</strong>
+          <strong>HENVIXY</strong>
           <span>Sales OS</span>
         </div>
       </div>

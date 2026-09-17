@@ -46,7 +46,7 @@ export default function Copiloto({ leadId, onUsarResposta }) {
       <div className="copiloto">
         <div className="row-between">
           <b className="row gap-6 fs-13">
-            <Bot size={15} color="var(--roxo)" /> Copiloto Henvix
+            <Bot size={15} color="var(--roxo)" /> Copiloto Henvixy
           </b>
           <button type="button" className="btn btn-sm" onClick={analisar} disabled={carregando}>
             <Sparkles size={13} /> {carregando ? 'Analisando...' : 'Analisar conversa'}
@@ -67,7 +67,7 @@ export default function Copiloto({ leadId, onUsarResposta }) {
     <div className="copiloto">
       <div className="row-between wrap gap-8">
         <b className="row gap-6 fs-13">
-          <Bot size={15} color="var(--roxo)" /> Copiloto Henvix
+          <Bot size={15} color="var(--roxo)" /> Copiloto Henvixy
         </b>
         <div className="row gap-8">
           <span className="chip" style={{ height: 22, color: t.cor, borderColor: t.cor }}>

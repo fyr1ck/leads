@@ -7,7 +7,7 @@ import { dataHora, numero } from '../lib/format.js';
 
 const CAMPOS = [
   { chave: 'tom', rotulo: 'Tom de voz', hint: 'Como o João Henrique deve soar.' },
-  { chave: 'servicos', rotulo: 'Serviços oferecidos', hint: 'O que a Henvix vende.' },
+  { chave: 'servicos', rotulo: 'Serviços oferecidos', hint: 'O que a Henvixy vende.' },
   { chave: 'precos', rotulo: 'Preços autorizados', hint: 'A ÚNICA fonte de valores. Vazio = a IA não fala preço.' },
   { chave: 'prazo', rotulo: 'Prazo de entrega', hint: '' },
   { chave: 'formas_pagamento', rotulo: 'Formas de pagamento', hint: '' },
@@ -74,7 +74,7 @@ export default function Skill() {
   return (
     <>
       <Card
-        titulo="Skill Henvix"
+        titulo="Skill Henvixy"
         icone={<ScrollText size={16} color="var(--accent)" />}
         acoes={
           <>

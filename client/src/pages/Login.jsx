@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { LogIn, KeyRound, AlertTriangle, Mail, ArrowRight } from 'lucide-react';
 import { api } from '../lib/api.js';
-import { Campo } from '../components/ui.jsx';
+import { Campo, Logo } from '../components/ui.jsx';
 
 /**
  * Entrada do painel. So os e-mails de USUARIOS_PERMITIDOS existem como usuario.
@@ -79,9 +79,9 @@ export default function Login({ onEntrou }) {
     <div className="login-tela">
       <div className="login-caixa anim-panel">
         <div className="row gap-12" style={{ marginBottom: 22 }}>
-          <div className="brand-mark" style={{ width: 42, height: 42, fontSize: 18 }}>H</div>
+          <Logo className="grande" />
           <div>
-            <strong style={{ fontSize: 17, letterSpacing: '0.02em' }}>HENVIX</strong>
+            <strong style={{ fontSize: 17, letterSpacing: '0.02em' }}>HENVIXY</strong>
             <div className="fs-12 dim" style={{ letterSpacing: '0.14em', textTransform: 'uppercase' }}>Sales OS</div>
           </div>
         </div>
