@@ -398,6 +398,16 @@ test('travas do .env: painel nao deixa o intervalo nem o limite diario mais agre
   }
 });
 
+test('limite diario e por numero: o que um WhatsApp restrito enviou nao trava outro', () => {
+  const { lead } = leadRepo.criarOuEnriquecer({ nome_estabelecimento: 'Limite Por Numero', telefone: '16994440000' });
+  const c = campaignRepo.criar({ nome: 'Contagem por numero' });
+  for (let i = 0; i < 3; i += 1) {
+    messageRepo.registrar({ lead_id: lead.id, campaign_id: c.id, direcao: 'OUT', corpo: 'oi', status: 'ENVIADA', wa_numero: '5516900000001' });
+  }
+  assert.equal(messageRepo.enviadasHoje({ soCampanha: true, numero: '5516900000001' }), 3);
+  assert.equal(messageRepo.enviadasHoje({ soCampanha: true, numero: '5516900000002' }), 0, 'numero novo comeca do zero');
+});
+
 test('classificacao local: robo do WhatsApp Business nao vira interessado', () => {
   assert.equal(classificarHeuristico('Seja bem-vindo(a) a Odonto+! Aguarde que ja vamos te atender').status, 'AGUARDANDO_RESPOSTA');
   assert.equal(classificarHeuristico('Bartolomeu Clinic agradece seu contato. Como podemos ajudar?').status, 'RESPONDEU');

@@ -117,6 +117,8 @@ export function migrar() {
   });
   db.exec('CREATE INDEX IF NOT EXISTS ix_leads_wa_jid ON leads(wa_jid)');
   db.exec('CREATE INDEX IF NOT EXISTS ix_leads_wa_lid ON leads(wa_lid)');
+  // por qual WhatsApp a mensagem saiu: o limite diario e contado por numero
+  garantirColunas('messages', { wa_numero: 'TEXT' });
   // buscas da deduplicacao: sem indice, cada linha importada varria a base inteira
   db.exec('CREATE INDEX IF NOT EXISTS ix_leads_google_maps ON leads(google_maps)');
   db.exec('CREATE INDEX IF NOT EXISTS ix_leads_place_id ON leads(place_id)');

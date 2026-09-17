@@ -33,7 +33,7 @@ export const MessageService = {
     // O limite e da prospeccao: responder quem ja falou com voce nao conta.
     if (campanha) {
       const limite = settingsRepo.limiteDiarioEfetivo(cfg);
-      if (limite > 0 && messageRepo.enviadasHoje({ soCampanha: true }) >= limite) {
+      if (limite > 0 && messageRepo.enviadasHoje({ soCampanha: true, numero: whatsapp.numero }) >= limite) {
         throw new AppError(`Limite diario de ${limite} mensagens de prospeccao atingido.`, 429);
       }
     }
@@ -52,7 +52,8 @@ export const MessageService = {
         telefone: lead.telefone_e164,
         wa_message_id: waId,
         status: 'ENVIADA',
-        autor
+        autor,
+        wa_numero: whatsapp.numero
       });
 
       const atualizado = leadRepo.marcarContatado(lead.id, corpo, {

@@ -77,6 +77,11 @@ export class WhatsAppService extends EventEmitter {
     return this.provider.status === 'CONECTADO';
   }
 
+  /** Numero conectado agora - o limite diario e contado por numero. */
+  get numero() {
+    return this.provider.numero || null;
+  }
+
   async conectar() {
     if (this.conectado) return this.estado();
     await this.provider.iniciar();

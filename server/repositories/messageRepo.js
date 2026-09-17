@@ -10,12 +10,13 @@ export function registrar({
   status = 'ENVIADA',
   erro = null,
   autor = 'SISTEMA',
-  lida = 0
+  lida = 0,
+  wa_numero = null
 }) {
   const r = run(
-    `INSERT INTO messages (lead_id, campaign_id, direcao, corpo, telefone, wa_message_id, status, erro, autor, lida)
-     VALUES (?,?,?,?,?,?,?,?,?,?)`,
-    lead_id, campaign_id, direcao, corpo, telefone, wa_message_id, status, erro, autor, lida
+    `INSERT INTO messages (lead_id, campaign_id, direcao, corpo, telefone, wa_message_id, status, erro, autor, lida, wa_numero)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
+    lead_id, campaign_id, direcao, corpo, telefone, wa_message_id, status, erro, autor, lida, wa_numero
   );
   return porId(Number(r.lastInsertRowid));
 }
@@ -75,13 +76,19 @@ export const marcarLidas = (leadId) =>
 export const totalNaoLidas = () =>
   Number(pluck("SELECT COUNT(*) AS n FROM messages WHERE direcao = 'IN' AND lida = 0") || 0);
 
-/** Enviadas hoje - usado pelo limite diario (spec 54). */
-export const enviadasHoje = ({ soCampanha = false } = {}) =>
+/**
+ * Enviadas hoje - usado pelo limite diario (spec 54).
+ * `numero`: conta so o que saiu por esse WhatsApp. O limite protege a reputacao
+ * de cada numero; o que um numero restrito enviou nao trava outro.
+ */
+export const enviadasHoje = ({ soCampanha = false, numero = null } = {}) =>
   Number(
     pluck(
       `SELECT COUNT(*) AS n FROM messages
         WHERE direcao = 'OUT' AND status = 'ENVIADA' AND date(created_at) = date('now', 'localtime')
-        ${soCampanha ? 'AND campaign_id IS NOT NULL' : ''}`
+        ${soCampanha ? 'AND campaign_id IS NOT NULL' : ''}
+        ${numero ? 'AND wa_numero = ?' : ''}`,
+      ...(numero ? [numero] : [])
     ) || 0
   );
 

@@ -271,7 +271,7 @@ class CampaignRunner {
 
       const cfg = settingsRepo.obterTodas();
       const limite = settingsRepo.limiteDiarioEfetivo(cfg);
-      if (limite > 0 && messageRepo.enviadasHoje({ soCampanha: true }) >= limite) {
+      if (limite > 0 && messageRepo.enviadasHoje({ soCampanha: true, numero: whatsapp.numero }) >= limite) {
         this.pausar(id, `Limite diario de ${limite} mensagens de prospeccao atingido. Continue amanha.`, { automatico: true });
         return;
       }
