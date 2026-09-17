@@ -41,7 +41,7 @@ export default function Topbar({ titulo, subtitulo, onMenu, acoes }) {
 
       {campanhaAtiva && (
         <Link to="/prospeccao" className="chip accent" style={{ height: 38, textDecoration: 'none' }} title="Campanha em andamento">
-          <Activity size={14} className={campanhaAtiva.fase === 'pausado' ? '' : 'spin'} />
+          <Activity size={14} className={['pausado', 'fora_horario'].includes(campanhaAtiva.fase) ? '' : 'spin'} />
           <span className="col" style={{ gap: 2, minWidth: 96 }}>
             <span className="fs-12 bold">
               {campanhaAtiva.enviados}/{campanhaAtiva.total}

@@ -6,6 +6,7 @@ import campaignRunner from '../services/CampaignRunner.js';
 import { asyncHandler } from '../middleware/index.js';
 import { AppError, naoEncontrado } from '../utils/errors.js';
 import { logger } from '../utils/logger.js';
+import { normalizarHorario } from '../utils/horario.js';
 
 const router = Router();
 
@@ -32,6 +33,22 @@ router.post(
       throw new AppError('Nenhum lead disponivel com esses filtros. Importe uma planilha ou ajuste os filtros.', 409);
     }
 
+    // horario automatico: sem ele a campanha envia a qualquer hora (como antes)
+    const horarioAtivo = req.body?.horarioAtivo ?? Boolean(cfg.horario_ativo);
+    let horario_inicio = null;
+    let horario_fim = null;
+    if (horarioAtivo) {
+      horario_inicio = normalizarHorario(req.body?.horarioInicio ?? cfg.horario_inicio);
+      horario_fim = normalizarHorario(req.body?.horarioFim ?? cfg.horario_fim);
+      if (!horario_inicio || !horario_fim) throw new AppError('Informe o horario de inicio e de fim no formato 08:00.');
+      if (horario_inicio === horario_fim) throw new AppError('O horario de inicio e de fim nao podem ser iguais.');
+    }
+    // o formulario abre com o ultimo horario usado
+    settingsRepo.salvar({
+      horario_ativo: horarioAtivo ? 1 : 0,
+      ...(horarioAtivo ? { horario_inicio, horario_fim } : {})
+    });
+
     const nome =
       String(req.body?.nome || '').trim() ||
       `Prospeccao ${new Date().toLocaleDateString('pt-BR')} ${new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`;
@@ -43,7 +60,9 @@ router.post(
       delay_max: Number(req.body?.delayMax ?? cfg.delay_max),
       bloco_tamanho: Number(req.body?.blocoTamanho ?? cfg.bloco_tamanho),
       bloco_pausa_minutos: Number(req.body?.blocoPausaMinutos ?? cfg.bloco_pausa_minutos),
-      filtros
+      filtros,
+      horario_inicio,
+      horario_fim
     });
 
     const enfileirados = campaignRepo.enfileirar(campanha.id, disponiveis);

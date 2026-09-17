@@ -391,6 +391,64 @@ test('lead antigo com LID gravado como telefone e corrigido ao conectar', async 
   assert.equal(corrigido.nome_estabelecimento, 'Contato do WhatsApp', 'nome que era so o numero e trocado');
 });
 
+/** "HH:MM" em Brasilia daqui a N minutos. */
+const horaDaquiA = (min) =>
+  new Intl.DateTimeFormat('en-GB', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })
+    .format(new Date(Date.now() + min * 60_000));
+
+test('fora do horario automatico a campanha espera e nao envia nada', async () => {
+  await whatsapp.conectar();
+  const lead = leadRepo.criarOuEnriquecer({ nome_estabelecimento: 'Lead Horario', telefone: '16988771234' }).lead;
+  const campanha = campaignRepo.criar({
+    nome: 'Agendada', delay_min: 1, delay_max: 1, bloco_tamanho: 0,
+    horario_inicio: horaDaquiA(120), horario_fim: horaDaquiA(180)
+  });
+  campaignRepo.enfileirar(campanha.id, [lead]);
+
+  const antes = fake.enviadas.length;
+  await campaignRunner.iniciar(campanha.id);
+  await esperar(300);
+
+  const estado = campaignRunner.estado(campanha.id);
+  assert.equal(estado.campanha.status, 'ATIVA', 'fica ligada esperando o horario');
+  assert.equal(estado.fase, 'fora_horario');
+  assert.ok(estado.proximoEnvioEm > Date.now() + 60 * 60_000, 'proximo envio so no horario de inicio');
+  assert.equal(fake.enviadas.length, antes, 'nenhuma mensagem fora do horario');
+
+  // WhatsApp caindo de madrugada nao pausa quem so esta esperando o horario
+  await fake.encerrar();
+  await esperar(100);
+  assert.equal(campaignRepo.porId(campanha.id).status, 'ATIVA');
+  await whatsapp.conectar();
+
+  campaignRunner.parar(campanha.id); // libera o timer da espera
+});
+
+test('campanha com horario retoma sozinha depois de reiniciar o servidor', async () => {
+  const lead = leadRepo.criarOuEnriquecer({ nome_estabelecimento: 'Lead Reboot', telefone: '16988775678' }).lead;
+  const campanha = campaignRepo.criar({
+    nome: 'Reboot', delay_min: 1, delay_max: 1, bloco_tamanho: 0,
+    horario_inicio: horaDaquiA(120), horario_fim: horaDaquiA(180)
+  });
+  campaignRepo.enfileirar(campanha.id, [lead]);
+  campaignRepo.atualizar(campanha.id, { status: 'ATIVA' }); // estava rodando quando o PC desligou
+  const semHorario = campaignRepo.criar({ nome: 'Reboot sem horario', delay_min: 1, delay_max: 1 });
+  campaignRepo.atualizar(semHorario.id, { status: 'ATIVA' });
+
+  await fake.encerrar();
+  campaignRunner.restaurarNoBoot();
+  assert.equal(campaignRepo.porId(campanha.id).status, 'PAUSADA');
+  assert.match(campaignRepo.porId(campanha.id).motivo_parada, /retoma sozinha/);
+
+  await whatsapp.conectar(); // WhatsApp reconecta depois do boot
+  await esperar(300);
+  assert.equal(campaignRepo.porId(campanha.id).status, 'ATIVA', 'a agendada volta sozinha');
+  assert.equal(campaignRepo.porId(semHorario.id).status, 'PAUSADA', 'a sem horario continua esperando o operador');
+
+  campaignRunner.parar(campanha.id);
+  campaignRunner.parar(semHorario.id);
+});
+
 test('resposta automatica nao pode ser ligada nem pela API de settings', () => {
   const cfg = settingsRepo.salvar({ ia_resposta_automatica: 1 });
   assert.equal(cfg.ia_resposta_automatica, 0);

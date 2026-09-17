@@ -57,7 +57,9 @@ export function contagemRegressiva(alvo) {
   if (restante <= 0) return null;
   const s = Math.ceil(restante / 1000);
   if (s < 60) return `${s}s`;
-  return `${Math.floor(s / 60)}min ${String(s % 60).padStart(2, '0')}s`;
+  if (s < 3600) return `${Math.floor(s / 60)}min ${String(s % 60).padStart(2, '0')}s`;
+  // espera do horario automatico pode passar de 12h
+  return `${Math.floor(s / 3600)}h ${String(Math.floor((s % 3600) / 60)).padStart(2, '0')}min`;
 }
 
 /** Emojis/rotulos das faixas de potencial (spec 58.7). */

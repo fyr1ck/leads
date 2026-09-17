@@ -6,14 +6,34 @@ import {
 } from 'lucide-react';
 import { api, qs } from '../lib/api.js';
 import { useApp } from '../state/AppContext.jsx';
-import { Card, Campo, Vazio, Progresso, SkeletonLista } from '../components/ui.jsx';
+import { Card, Campo, Vazio, Progresso, SkeletonLista, Switch } from '../components/ui.jsx';
 import LogConsole from '../components/LogConsole.jsx';
 import { numero, contagemRegressiva } from '../lib/format.js';
+
+const relogioBrasilia = new Intl.DateTimeFormat('en-GB', {
+  timeZone: 'America/Sao_Paulo',
+  hour: '2-digit',
+  minute: '2-digit',
+  hourCycle: 'h23'
+});
+const emMinutos = (hhmm) => {
+  const [h, m] = String(hhmm || '').split(':').map(Number);
+  return Number.isFinite(h) && Number.isFinite(m) ? h * 60 + m : null;
+};
+
+/** Mesma regra do servidor: janela em Brasilia, pode virar a noite (22:00-02:00). */
+function dentroDoHorario(inicio, fim) {
+  const ini = emMinutos(inicio);
+  const end = emMinutos(fim);
+  if (ini === null || end === null || ini === end) return true;
+  const agora = emMinutos(relogioBrasilia.format(new Date()));
+  return ini < end ? agora >= ini && agora < end : agora >= ini || agora < end;
+}
 
 export default function Prospeccao() {
   const { toast, whatsapp, settings, campanhas, campanhaAtiva } = useApp();
   const [contadores, setContadores] = useState(null);
-  const [opcoes, setOpcoes] = useState({ cidades: [], categorias: [] });
+  const [opcoes, setOpcoes] = useState({ cidades: [], categorias: [], nichos: [] });
   const [previa, setPrevia] = useState(null);
   const [criando, setCriando] = useState(false);
   // relogio de 1s: mantem a contagem regressiva do proximo envio viva na tela
@@ -21,13 +41,20 @@ export default function Prospeccao() {
   const [form, setForm] = useState({
     quantidade: 50,
     cidade: '',
+    nicho: '',
     categoria: '',
     temSite: '',
     delayMin: 30,
     delayMax: 90,
     blocoTamanho: 10,
-    blocoPausaMinutos: 5
+    blocoPausaMinutos: 5,
+    horarioAtivo: true,
+    horarioInicio: '08:00',
+    horarioFim: '18:00'
   });
+
+  const horarioInvalido = form.horarioAtivo && (!form.horarioInicio || !form.horarioFim || form.horarioInicio === form.horarioFim);
+  const foraDoHorario = form.horarioAtivo && !horarioInvalido && !dentroDoHorario(form.horarioInicio, form.horarioFim);
 
   // campanha em foco: a ativa, senao a ultima pausada/rascunho
   const ultima = campanhaAtiva || Object.values(campanhas).sort((a, b) => (b?.campanha?.id || 0) - (a?.campanha?.id || 0))[0] || null;
@@ -40,7 +67,10 @@ export default function Prospeccao() {
       delayMin: settings.delay_min ?? f.delayMin,
       delayMax: settings.delay_max ?? f.delayMax,
       blocoTamanho: settings.bloco_tamanho ?? f.blocoTamanho,
-      blocoPausaMinutos: settings.bloco_pausa_minutos ?? f.blocoPausaMinutos
+      blocoPausaMinutos: settings.bloco_pausa_minutos ?? f.blocoPausaMinutos,
+      horarioAtivo: settings.horario_ativo === undefined ? f.horarioAtivo : Boolean(settings.horario_ativo),
+      horarioInicio: settings.horario_inicio || f.horarioInicio,
+      horarioFim: settings.horario_fim || f.horarioFim
     }));
   }, [settings]);
 
@@ -66,13 +96,13 @@ export default function Prospeccao() {
   const verPrevia = useCallback(async () => {
     try {
       const r = await api.get(
-        `/leads/disponiveis${qs({ quantidade: form.quantidade, cidade: form.cidade, categoria: form.categoria, temSite: form.temSite })}`
+        `/leads/disponiveis${qs({ quantidade: form.quantidade, cidade: form.cidade, nicho: form.nicho, categoria: form.categoria, temSite: form.temSite })}`
       );
       setPrevia(r);
     } catch (e) {
       toast('erro', 'Erro ao selecionar leads', e.message);
     }
-  }, [form.quantidade, form.cidade, form.categoria, form.temSite, toast]);
+  }, [form.quantidade, form.cidade, form.nicho, form.categoria, form.temSite, toast]);
 
   useEffect(() => {
     const t = setTimeout(verPrevia, 250);
@@ -90,10 +120,17 @@ export default function Prospeccao() {
         delayMax: Number(form.delayMax),
         blocoTamanho: Number(form.blocoTamanho),
         blocoPausaMinutos: Number(form.blocoPausaMinutos),
-        filtros: { cidade: form.cidade, categoria: form.categoria, temSite: form.temSite }
+        horarioAtivo: form.horarioAtivo,
+        horarioInicio: form.horarioInicio,
+        horarioFim: form.horarioFim,
+        filtros: { cidade: form.cidade, nicho: form.nicho, categoria: form.categoria, temSite: form.temSite }
       });
       await api.post(`/campaigns/${r.campanha.id}/start`, {});
-      toast('sucesso', 'Prospecção iniciada', `${r.enfileirados} leads na fila.`);
+      if (foraDoHorario) {
+        toast('sucesso', 'Prospecção agendada', `${r.enfileirados} leads na fila. Começa sozinha às ${form.horarioInicio}.`);
+      } else {
+        toast('sucesso', 'Prospecção iniciada', `${r.enfileirados} leads na fila.`);
+      }
       carregar();
     } catch (e) {
       toast('erro', 'Não foi possível iniciar', e.message);
@@ -140,7 +177,7 @@ export default function Prospeccao() {
       {/* ------------------------------------------------ campanha em andamento */}
       {p?.campanha && ['ATIVA', 'PAUSADA'].includes(status) && (
         <Card
-          titulo={`${status === 'ATIVA' ? '🟢' : '🟡'} ${p.campanha.nome}`}
+          titulo={`${status === 'ATIVA' ? (p.fase === 'fora_horario' ? '⏰' : '🟢') : '🟡'} ${p.campanha.nome}`}
           acoes={
             <>
               {status === 'ATIVA' ? (
@@ -166,7 +203,9 @@ export default function Prospeccao() {
                 </b>
                 <span className="dim">
                   {status === 'ATIVA'
-                    ? p.fase === 'pausa_bloco'
+                    ? p.fase === 'fora_horario'
+                      ? `Fora do horário · começa às ${p.campanha.horario_inicio}${proximo ? ` (em ${proximo})` : ''}`
+                      : p.fase === 'pausa_bloco'
                       ? `Pausa de bloco · volta em ${proximo || '...'}`
                       : p.fase === 'aguardando'
                         ? `Próximo envio em ${proximo || '...'}`
@@ -177,8 +216,14 @@ export default function Prospeccao() {
                 </span>
               </div>
               <div className="mt-8">
-                <Progresso valor={p.enviados} total={p.total} ativo={status === 'ATIVA'} grande />
+                <Progresso valor={p.enviados} total={p.total} ativo={status === 'ATIVA' && p.fase !== 'fora_horario'} grande />
               </div>
+              {p.campanha.horario_inicio && p.campanha.horario_fim && (
+                <div className="fs-12 dim mt-8 row gap-6">
+                  <Clock size={12} /> Envia das {p.campanha.horario_inicio} às {p.campanha.horario_fim} · se a fila não acabar, continua no dia
+                  seguinte
+                </div>
+              )}
               {p.atual && (
                 <div className="fs-12 dim mt-8">
                   Lead atual: <b className="soft">{p.atual.nome}</b>
@@ -231,6 +276,16 @@ export default function Prospeccao() {
                 ))}
               </select>
             </Campo>
+            {opcoes.nichos?.length > 0 && (
+              <Campo label="Nicho">
+                <select className="select" value={form.nicho} onChange={set('nicho')}>
+                  <option value="">Todos</option>
+                  {opcoes.nichos.map((n) => (
+                    <option key={n} value={n}>{n}</option>
+                  ))}
+                </select>
+              </Campo>
+            )}
             <Campo label="Categoria">
               <select className="select" value={form.categoria} onChange={set('categoria')}>
                 <option value="">Todas</option>
@@ -273,6 +328,45 @@ export default function Prospeccao() {
             descansa {form.blocoPausaMinutos || 0} minuto(s).
           </p>
 
+          <div className="divisor mt-16" />
+
+          <div className="row-between mt-8 gap-12">
+            <div className="row gap-8">
+              <Clock size={15} color="var(--muted)" />
+              <span className="label" style={{ margin: 0 }}>Horário automático</span>
+            </div>
+            <Switch
+              ligado={form.horarioAtivo}
+              onChange={(v) => setForm((f) => ({ ...f, horarioAtivo: v }))}
+              titulo={form.horarioAtivo ? 'Desligar horário automático' : 'Ligar horário automático'}
+            />
+          </div>
+          {form.horarioAtivo ? (
+            <>
+              <div className="filtros mt-8">
+                <Campo label="Começa às">
+                  <input className="input" type="time" value={form.horarioInicio} onChange={set('horarioInicio')} required />
+                </Campo>
+                <Campo label="Termina às">
+                  <input className="input" type="time" value={form.horarioFim} onChange={set('horarioFim')} required />
+                </Campo>
+              </div>
+              <p className="hint mt-8">
+                {horarioInvalido
+                  ? 'Informe um horário de início e de fim diferentes.'
+                  : `Envia só entre ${form.horarioInicio} e ${form.horarioFim} (horário de Brasília). Se a fila não acabar até ${form.horarioFim}, a prospecção para sozinha e continua no dia seguinte às ${form.horarioInicio}.`}
+              </p>
+              {foraDoHorario && (
+                <div className="chip accent mt-8" style={{ height: 'auto', padding: '9px 12px', whiteSpace: 'normal' }}>
+                  <Clock size={14} /> Agora está fora do horário: ao clicar, a prospecção fica agendada e começa sozinha às{' '}
+                  {form.horarioInicio}.
+                </div>
+              )}
+            </>
+          ) : (
+            <p className="hint mt-8">Desligado: envia a qualquer hora, assim que você iniciar.</p>
+          )}
+
           <div className="row-between mt-24 wrap gap-12">
             <span className="fs-13 muted">
               {previa ? (
@@ -287,9 +381,9 @@ export default function Prospeccao() {
               type="button"
               className="btn btn-primary btn-lg"
               onClick={iniciar}
-              disabled={criando || !whatsapp?.conectado || !previa?.total}
+              disabled={criando || !whatsapp?.conectado || !previa?.total || horarioInvalido}
             >
-              <Rocket size={17} /> {criando ? 'Preparando...' : 'INICIAR PROSPECÇÃO'}
+              <Rocket size={17} /> {criando ? 'Preparando...' : foraDoHorario ? 'AGENDAR PROSPECÇÃO' : 'INICIAR PROSPECÇÃO'}
             </button>
           </div>
           {!whatsapp?.conectado && (

@@ -86,9 +86,8 @@ export function AppProvider({ children }) {
 
   const entrar = useCallback(
     async (usuario) => {
+      // o socket conecta no efeito de "logado", ja com os ouvintes registrados
       setSessao((s) => ({ ...(s || {}), logado: true, usuario }));
-      socket.disconnect();
-      socket.connect();
       await recarregarBase();
       await recarregarStats();
     },
@@ -183,6 +182,10 @@ export function AppProvider({ children }) {
     socket.on(EVENTOS.NOTIFICACAO, onNotificacao);
     socket.on(EVENTOS.FOLLOWUP, onMudouAlgo);
     socket.on(EVENTOS.DEMO, onMudouAlgo);
+
+    // conexao nova so agora: o servidor manda o estado inicial com todos escutando
+    if (socket.connected) socket.disconnect();
+    socket.connect();
 
     return () => {
       socket.off('connect', onConectar);

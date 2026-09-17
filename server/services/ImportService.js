@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import { run, all, tx } from '../db/index.js';
 import * as leadRepo from '../repositories/leadRepo.js';
 import ActivityService from './ActivityService.js';
-import { mapearColunas, CAMPOS } from '../utils/columnMap.js';
+import { mapearColunas, CAMPOS, statusSiteDoValor, numeroDaPlanilha } from '../utils/columnMap.js';
 import { normalizarTelefone, formatarTelefone } from '../utils/phone.js';
 import { bus, EVENTOS } from '../realtime/bus.js';
 import { logger } from '../utils/logger.js';
@@ -25,21 +25,47 @@ function valorCelula(cell) {
   return String(v).trim();
 }
 
+/**
+ * Abre a planilha e devolve cabecalhos + linhas da aba que tem os leads.
+ *
+ * `ignoreNodes: ['tableParts']`: planilhas exportadas por scripts (openpyxl,
+ * Google Maps scrapers de terceiros etc.) gravam "Tabelas" do Excel com caminho
+ * absoluto ("/xl/tables/table1.xml") e o ExcelJS quebrava com
+ * "Cannot read properties of undefined (reading 'name')". A formatacao de
+ * tabela nao importa para a importacao - so as celulas.
+ */
 async function carregarPlanilha(arquivo) {
   const wb = new ExcelJS.Workbook();
   const ext = path.extname(arquivo).toLowerCase();
   try {
     if (ext === '.csv') await wb.csv.readFile(arquivo);
-    else await wb.xlsx.readFile(arquivo);
+    else await wb.xlsx.readFile(arquivo, { ignoreNodes: ['tableParts'] });
   } catch (err) {
-    throw new AppError(`Nao foi possivel ler a planilha: ${err.message}`, 400);
+    logger.warn('import', `Falha ao abrir a planilha: ${err.message}`);
+    throw new AppError(
+      'Nao consegui abrir essa planilha. Abra no Excel ou Google Planilhas, salve de novo como .xlsx e tente outra vez.',
+      400
+    );
   }
-  const ws = wb.worksheets[0];
-  if (!ws) throw new AppError('A planilha esta vazia.', 400);
-  return ws;
+  if (!wb.worksheets.length) throw new AppError('A planilha esta vazia.', 400);
+
+  // Planilha com varias abas ("Leads", "Resumo", "Notas"): usa a primeira que
+  // tem coluna de nome ou telefone, nao necessariamente a primeira aba.
+  let primeira = null;
+  for (const ws of wb.worksheets) {
+    const linhas = extrairLinhas(ws);
+    if (!linhas) continue;
+    primeira ||= linhas;
+    const campos = Object.values(mapearColunas(linhas.cabecalhos, amostrasDe(linhas)));
+    if (campos.includes('nome_estabelecimento') || campos.includes('telefone')) return linhas;
+  }
+  if (!primeira) throw new AppError('A planilha nao tem nenhuma linha preenchida.', 400);
+  return primeira;
 }
 
-/** Le a planilha e devolve cabecalhos + linhas cruas. */
+const amostrasDe = ({ cabecalhos, dados }) => cabecalhos.map((_, i) => dados.slice(0, 25).map((l) => l[i]));
+
+/** Le uma aba e devolve cabecalhos + linhas cruas (null se a aba estiver vazia). */
 function extrairLinhas(ws) {
   const linhas = [];
   ws.eachRow({ includeEmpty: false }, (row) => {
@@ -48,7 +74,7 @@ function extrairLinhas(ws) {
     for (let c = 1; c <= total; c += 1) valores.push(valorCelula(row.getCell(c)));
     if (valores.some((v) => v !== '')) linhas.push(valores);
   });
-  if (!linhas.length) throw new AppError('A planilha nao tem nenhuma linha preenchida.', 400);
+  if (!linhas.length) return null;
 
   // A primeira linha com 2+ textos e tratada como cabecalho.
   let idxCabecalho = 0;
@@ -66,9 +92,9 @@ function extrairLinhas(ws) {
 
 /** Analise previa (mostrar mapeamento antes de importar). */
 export async function analisar(arquivo) {
-  const ws = await carregarPlanilha(arquivo);
-  const { cabecalhos, dados } = extrairLinhas(ws);
-  const amostras = cabecalhos.map((_, i) => dados.slice(0, 25).map((l) => l[i]));
+  const planilha = await carregarPlanilha(arquivo);
+  const { cabecalhos, dados } = planilha;
+  const amostras = amostrasDe(planilha);
   const mapa = mapearColunas(cabecalhos, amostras);
 
   const colunas = cabecalhos.map((cab, i) => ({
@@ -96,16 +122,18 @@ export async function analisar(arquivo) {
  * fallback (spec 39). Nada e inventado: campo ausente fica vazio (spec 52).
  */
 export async function importar(arquivo, { nomeOriginal = null, mapaManual = null } = {}) {
-  const ws = await carregarPlanilha(arquivo);
-  const { cabecalhos, dados } = extrairLinhas(ws);
-  const amostras = cabecalhos.map((_, i) => dados.slice(0, 25).map((l) => l[i]));
-  const mapa = mapaManual && Object.keys(mapaManual).length ? mapaManual : mapearColunas(cabecalhos, amostras);
+  const planilha = await carregarPlanilha(arquivo);
+  const { cabecalhos, dados } = planilha;
+  const mapa = mapaManual && Object.keys(mapaManual).length ? mapaManual : mapearColunas(cabecalhos, amostrasDe(planilha));
 
   if (!Object.values(mapa).includes('nome_estabelecimento') && !Object.values(mapa).includes('telefone')) {
     throw new AppError(
       'Nao encontrei nenhuma coluna de nome do estabelecimento nem de telefone. Confira o cabecalho da planilha.',
       400
     );
+  }
+  if (!dados.length) {
+    throw new AppError('A planilha so tem o cabecalho: nao ha nenhum lead nas linhas de baixo.', 400);
   }
 
   const resumo = { total: dados.length, importados: 0, duplicados: 0, atualizados: 0, invalidos: 0 };
@@ -122,6 +150,14 @@ export async function importar(arquivo, { nomeOriginal = null, mapaManual = null
         if (campo) dadosLead[campo] = valor;
         else if (cab) extra[cab] = valor;
       });
+
+      // campos das listas do Google Maps: so entram se o valor for legivel
+      if ('status_site' in dadosLead) dadosLead.status_site = statusSiteDoValor(dadosLead.status_site);
+      if ('avaliacao' in dadosLead) dadosLead.avaliacao = numeroDaPlanilha(dadosLead.avaliacao);
+      if ('total_avaliacoes' in dadosLead) dadosLead.total_avaliacoes = numeroDaPlanilha(dadosLead.total_avaliacoes, { inteiro: true });
+      if (dadosLead.estado) dadosLead.estado = String(dadosLead.estado).trim().toUpperCase();
+      // sem coluna de categoria, o nicho serve de filtro na prospeccao (mesmo dado, nada inventado)
+      if (!dadosLead.categoria && dadosLead.nicho) dadosLead.categoria = dadosLead.nicho;
 
       const telefone = normalizarTelefone(dadosLead.telefone);
       let nome = String(dadosLead.nome_estabelecimento || '').trim();
@@ -149,10 +185,13 @@ export async function importar(arquivo, { nomeOriginal = null, mapaManual = null
       if (acao === 'CRIADO') {
         resumo.importados += 1;
         criados.push(lead.id);
+        // grava na linha do tempo do lead sem disparar um aviso em tempo real por
+        // lead (uma planilha de 3.000 linhas inundava o painel com 3.000 eventos)
         ActivityService.registrar({
           lead_id: lead.id,
           tipo: 'LEAD_IMPORTADO',
-          descricao: nomeOriginal ? `Planilha ${nomeOriginal}` : 'Planilha XLSX'
+          descricao: nomeOriginal ? `Planilha ${nomeOriginal}` : 'Planilha XLSX',
+          emitir: false
         });
       } else if (acao === 'ATUALIZADO') resumo.atualizados += 1;
       else resumo.duplicados += 1;

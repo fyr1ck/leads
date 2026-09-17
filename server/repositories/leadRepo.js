@@ -337,6 +337,7 @@ export function montarFiltro(f = {}) {
 
   if (f.cidade) add('l.cidade = ? COLLATE NOCASE', f.cidade);
   if (f.categoria) add('l.categoria = ? COLLATE NOCASE', f.categoria);
+  if (f.nicho) add('l.nicho = ? COLLATE NOCASE', f.nicho);
   if (f.status) add('l.status = ?', f.status);
   if (f.pipeline) add('l.pipeline = ?', f.pipeline);
   if (f.prioridade) add('l.prioridade = ?', f.prioridade);
@@ -350,8 +351,9 @@ export function montarFiltro(f = {}) {
   if (f.respondeu === 'nao') add('l.respondeu = 0');
   if (f.temInstagram === 'sim') add("l.instagram IS NOT NULL AND TRIM(l.instagram) <> ''");
   if (f.temInstagram === 'nao') add("(l.instagram IS NULL OR TRIM(l.instagram) = '')");
-  if (f.temSite === 'sim') add("l.site IS NOT NULL AND TRIM(l.site) <> ''");
-  if (f.temSite === 'nao') add("(l.site IS NULL OR TRIM(l.site) = '')");
+  // planilha pode dizer "tem site: Sim" sem trazer o endereco -> status_site conta
+  if (f.temSite === 'sim') add("((l.site IS NOT NULL AND TRIM(l.site) <> '') OR l.status_site = 'COM_SITE')");
+  if (f.temSite === 'nao') add("(l.site IS NULL OR TRIM(l.site) = '') AND COALESCE(l.status_site, '') <> 'COM_SITE'");
   if (f.temTelefone === 'sim') add('l.telefone_e164 IS NOT NULL');
   if (f.temTelefone === 'nao') add('l.telefone_e164 IS NULL');
   if (f.naProspeccao === 'sim') add('l.na_prospeccao = 1');
@@ -437,6 +439,8 @@ export const cidades = () =>
   all("SELECT DISTINCT cidade AS valor FROM leads WHERE cidade IS NOT NULL AND TRIM(cidade) <> '' ORDER BY cidade COLLATE NOCASE").map((r) => r.valor);
 export const categorias = () =>
   all("SELECT DISTINCT categoria AS valor FROM leads WHERE categoria IS NOT NULL AND TRIM(categoria) <> '' ORDER BY categoria COLLATE NOCASE").map((r) => r.valor);
+export const nichosDaBase = () =>
+  all("SELECT DISTINCT nicho AS valor FROM leads WHERE nicho IS NOT NULL AND TRIM(nicho) <> '' ORDER BY nicho COLLATE NOCASE").map((r) => r.valor);
 
 /** Central de Oportunidades: quem esta mais perto de comprar (spec 58.2). */
 export function oportunidades({ grupo = 'todos', limite = 200 } = {}) {

@@ -6,6 +6,10 @@ import { io } from 'socket.io-client';
  */
 export const socket = io('/', {
   path: '/socket.io',
+  // so conecta depois do login e com os ouvintes prontos (AppContext). Conectando
+  // no import, o "connect" e o estado inicial chegavam antes de alguem escutar e
+  // o painel ficava com "Servidor offline" / "WhatsApp desconectado" para sempre.
+  autoConnect: false,
   transports: ['websocket', 'polling'],
   reconnectionDelay: 900,
   reconnectionDelayMax: 6000,

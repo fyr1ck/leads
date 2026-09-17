@@ -10,13 +10,17 @@ export function criar({
   delay_max = 90,
   bloco_tamanho = 10,
   bloco_pausa_minutos = 5,
-  filtros = null
+  filtros = null,
+  horario_inicio = null,
+  horario_fim = null
 }) {
   const r = run(
-    `INSERT INTO campaigns (nome, quantidade_alvo, delay_min, delay_max, bloco_tamanho, bloco_pausa_minutos, filtros, status)
-     VALUES (?,?,?,?,?,?,?, 'RASCUNHO')`,
+    `INSERT INTO campaigns (nome, quantidade_alvo, delay_min, delay_max, bloco_tamanho, bloco_pausa_minutos, filtros,
+                            horario_inicio, horario_fim, status)
+     VALUES (?,?,?,?,?,?,?,?,?, 'RASCUNHO')`,
     nome, quantidade_alvo, delay_min, delay_max, bloco_tamanho, bloco_pausa_minutos,
-    filtros ? JSON.stringify(filtros) : null
+    filtros ? JSON.stringify(filtros) : null,
+    horario_inicio, horario_fim
   );
   return porId(Number(r.lastInsertRowid));
 }
@@ -34,7 +38,8 @@ const COLUNAS = new Set([
   'motivo_parada', 'started_at', 'finished_at',
   // v2 - Sales OS: sem 'tipo' aqui, a campanha de reativacao nasceria como
   // prospeccao comum e o runner ignoraria os leads por duplicidade.
-  'tipo', 'descricao', 'nicho', 'localizacao'
+  'tipo', 'descricao', 'nicho', 'localizacao',
+  'horario_inicio', 'horario_fim'
 ]);
 
 export function atualizar(id, patch = {}) {

@@ -93,6 +93,7 @@ router.get('/filtros/opcoes', (req, res) => {
   res.json({
     cidades: leadRepo.cidades(),
     categorias: leadRepo.categorias(),
+    nichos: leadRepo.nichosDaBase(),
     etiquetas: tagRepo.listar(),
     pipeline: PIPELINE_SLUGS,
     contadores: leadRepo.contadores()

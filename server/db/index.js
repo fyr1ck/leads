@@ -113,13 +113,20 @@ export function migrar() {
     wa_jid: 'TEXT'
   });
   db.exec('CREATE INDEX IF NOT EXISTS ix_leads_wa_jid ON leads(wa_jid)');
+  // buscas da deduplicacao: sem indice, cada linha importada varria a base inteira
+  db.exec('CREATE INDEX IF NOT EXISTS ix_leads_google_maps ON leads(google_maps)');
+  db.exec('CREATE INDEX IF NOT EXISTS ix_leads_place_id ON leads(place_id)');
+  db.exec('CREATE INDEX IF NOT EXISTS ix_leads_tel_sufixo ON leads(substr(telefone_e164, -8))');
   // id da etiqueta correspondente no WhatsApp Business (sincronizacao)
   garantirColunas('tags', { wa_label_id: 'TEXT', wa_cor: 'INTEGER' });
   garantirColunas('campaigns', {
     descricao: 'TEXT',
     nicho: 'TEXT',
     localizacao: 'TEXT',
-    tipo: "TEXT NOT NULL DEFAULT 'PROSPECCAO'"
+    tipo: "TEXT NOT NULL DEFAULT 'PROSPECCAO'",
+    // janela de envio "HH:MM" (Brasilia); vazio = envia a qualquer hora
+    horario_inicio: 'TEXT',
+    horario_fim: 'TEXT'
   });
 
   for (const [antigo, novo] of Object.entries(PIPELINE_ANTIGO)) {

@@ -15,6 +15,10 @@ const PADROES = () => ({
   ia_resposta_automatica: 0,
   remover_da_prospeccao_ao_contatar: 1,
   quantidade_padrao_prospeccao: 50,
+  // horario automatico da prospeccao (Brasilia): comeca e termina sozinha
+  horario_ativo: 1,
+  horario_inicio: '08:00',
+  horario_fim: '18:00',
   // v2 - Sales OS
   followup_dias: '1,3,7',
   followup_automatico: 1,
@@ -28,7 +32,7 @@ const PADROES = () => ({
 const CHAVES_NUMERICAS = new Set([
   'delay_min', 'delay_max', 'bloco_tamanho', 'bloco_pausa_minutos', 'limite_diario',
   'max_erros_consecutivos', 'ia_analise_automatica', 'ia_resposta_automatica',
-  'remover_da_prospeccao_ao_contatar', 'quantidade_padrao_prospeccao',
+  'remover_da_prospeccao_ao_contatar', 'quantidade_padrao_prospeccao', 'horario_ativo',
   'followup_automatico', 'reativacao_dias', 'busca_raio_km', 'busca_somente_sem_site',
   'wa_etiquetas_sync'
 ]);

@@ -28,7 +28,7 @@ export const TIPOS = {
   OBSERVACAO: { titulo: 'Observacao', icone: '\u{1F4DD}' }
 };
 
-export function registrar({ lead_id = null, tipo, titulo = null, descricao = null, meta = null }) {
+export function registrar({ lead_id = null, tipo, titulo = null, descricao = null, meta = null, emitir = true }) {
   const padrao = TIPOS[tipo] || { titulo: tipo, icone: '\u{2022}' };
   const r = run(
     'INSERT INTO activities (lead_id, tipo, titulo, descricao, icone, meta) VALUES (?,?,?,?,?,?)',
@@ -39,6 +39,7 @@ export function registrar({ lead_id = null, tipo, titulo = null, descricao = nul
     padrao.icone,
     meta ? JSON.stringify(meta) : null
   );
+  if (!emitir) return { id: Number(r.lastInsertRowid) };
   const atividade = get('SELECT * FROM activities WHERE id = ?', Number(r.lastInsertRowid));
   bus.emit(EVENTOS.ATIVIDADE, atividade);
   return atividade;

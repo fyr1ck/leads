@@ -15,7 +15,12 @@ const ROTULOS = {
   instagram: 'Instagram',
   categoria: 'Categoria',
   site: 'Site',
-  observacoes: 'Observações'
+  observacoes: 'Observações',
+  nicho: 'Nicho',
+  estado: 'Estado (UF)',
+  avaliacao: 'Nota no Google',
+  total_avaliacoes: 'Nº de avaliações',
+  status_site: 'Tem site? (sim/não)'
 };
 
 export default function Importar() {

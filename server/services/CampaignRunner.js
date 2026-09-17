@@ -10,6 +10,7 @@ import { bus, EVENTOS } from '../realtime/bus.js';
 import { logger } from '../utils/logger.js';
 import { AppError, mensagemAmigavel } from '../utils/errors.js';
 import { criarSinal, esperaCancelavel, delayAleatorio } from '../utils/delay.js';
+import { temJanela, msAteAbrir } from '../utils/horario.js';
 
 /**
  * Motor da prospeccao (spec 9 / 13 / 14 / 44 / 54).
@@ -19,12 +20,16 @@ import { criarSinal, esperaCancelavel, delayAleatorio } from '../utils/delay.js'
  *  - delay aleatorio dentro da faixa configurada, nunca fixo;
  *  - pausa entre blocos configuravel;
  *  - pausa automatica se o WhatsApp cair ou der erro em sequencia;
- *  - nunca envia duas vezes para o mesmo telefone.
+ *  - nunca envia duas vezes para o mesmo telefone;
+ *  - com horario definido (ex.: 08:00-18:00), so envia dentro dele: fora da
+ *    janela espera sozinha e retoma no proximo inicio ate a fila acabar.
  */
 class CampaignRunner {
   constructor() {
     this.execucoes = new Map();
     this.monitorLigado = false;
+    // campanhas com horario que estavam rodando quando o servidor reiniciou
+    this.retomarAoConectar = new Set();
   }
 
   _exec(id) {
@@ -49,9 +54,13 @@ class CampaignRunner {
     if (this.monitorLigado) return;
     this.monitorLigado = true;
     whatsapp.on('status', ({ conectado }) => {
-      if (conectado) return;
+      if (conectado) {
+        this._retomarAgendadas();
+        return;
+      }
       for (const [id, exec] of this.execucoes) {
-        if (exec.rodando) {
+        // esperando o horario de inicio nao envia nada: confere a conexao quando abrir
+        if (exec.rodando && exec.fase !== 'fora_horario') {
           this.pausar(id, 'WhatsApp desconectado. A campanha foi pausada para evitar novos envios.', {
             automatico: true
           });
@@ -60,16 +69,40 @@ class CampaignRunner {
     });
   }
 
-  /** Campanha que ficou "ATIVA" num restart volta como PAUSADA, nunca sozinha. */
+  /**
+   * Campanha que ficou "ATIVA" num restart volta como PAUSADA.
+   * Excecao: a que tem horario automatico - o operador pediu para ela comecar
+   * sozinha, entao retoma assim que o WhatsApp reconectar.
+   */
   restaurarNoBoot() {
     for (const c of campaignRepo.ativas()) {
-      if (c.status === 'ATIVA') {
+      if (c.status !== 'ATIVA') continue;
+      if (temJanela(c.horario_inicio, c.horario_fim)) {
         campaignRepo.atualizar(c.id, {
           status: 'PAUSADA',
-          motivo_parada: 'O servidor foi reiniciado. Clique em CONTINUAR para retomar.'
+          motivo_parada: `O servidor foi reiniciado. Ela retoma sozinha quando o WhatsApp conectar (horario ${c.horario_inicio}-${c.horario_fim}).`
         });
-        logger.warn('campanha', `Campanha "${c.nome}" estava ativa no desligamento e voltou como PAUSADA.`);
+        this.retomarAoConectar.add(Number(c.id));
+        logger.warn('campanha', `Campanha "${c.nome}" retoma sozinha quando o WhatsApp conectar.`);
+        continue;
       }
+      campaignRepo.atualizar(c.id, {
+        status: 'PAUSADA',
+        motivo_parada: 'O servidor foi reiniciado. Clique em CONTINUAR para retomar.'
+      });
+      logger.warn('campanha', `Campanha "${c.nome}" estava ativa no desligamento e voltou como PAUSADA.`);
+    }
+    if (whatsapp.conectado) this._retomarAgendadas();
+  }
+
+  _retomarAgendadas() {
+    for (const id of [...this.retomarAoConectar]) {
+      this.retomarAoConectar.delete(id);
+      const c = campaignRepo.porId(id);
+      if (!c || c.status !== 'PAUSADA') continue;
+      this.iniciar(id).catch((err) =>
+        logger.warn('campanha', `Nao consegui retomar "${c.nome}" sozinha: ${mensagemAmigavel(err)}`)
+      );
     }
   }
 
@@ -115,12 +148,16 @@ class CampaignRunner {
     exec.errosConsecutivos = 0;
     exec.fase = 'enviando';
 
+    this.retomarAoConectar.delete(Number(id));
     campaignRepo.atualizar(id, {
       status: 'ATIVA',
       motivo_parada: null,
       started_at: campanha.started_at || new Date().toISOString()
     });
-    logger.ok('campanha', `Campanha "${campanha.nome}" iniciada (${progresso.pendentes} leads na fila).`);
+    const janela = temJanela(campanha.horario_inicio, campanha.horario_fim)
+      ? ` Horario de envio: ${campanha.horario_inicio} as ${campanha.horario_fim}.`
+      : '';
+    logger.ok('campanha', `Campanha "${campanha.nome}" iniciada (${progresso.pendentes} leads na fila).${janela}`);
     bus.emit(EVENTOS.CAMPANHA_STATUS, { id: Number(id), status: 'ATIVA' });
     this._emitir(id);
 
@@ -134,6 +171,7 @@ class CampaignRunner {
 
   pausar(id, motivo = 'Pausada pelo operador.', { automatico = false } = {}) {
     const exec = this._exec(id);
+    if (!automatico) this.retomarAoConectar.delete(Number(id));
     exec.sinal.cancelar();
     exec.rodando = false;
     exec.fase = 'pausado';
@@ -161,6 +199,7 @@ class CampaignRunner {
 
   parar(id, motivo = 'Parada pelo operador.') {
     const exec = this._exec(id);
+    this.retomarAoConectar.delete(Number(id));
     exec.sinal.cancelar();
     exec.rodando = false;
     exec.fase = 'parado';
@@ -199,6 +238,30 @@ class CampaignRunner {
 
       const campanha = campaignRepo.porId(id);
       if (!campanha || campanha.status !== 'ATIVA') return;
+
+      // --- horario automatico: fora da janela espera o proximo inicio ---
+      const ateAbrir = msAteAbrir(campanha.horario_inicio, campanha.horario_fim);
+      if (ateAbrir > 0) {
+        if (exec.fase !== 'fora_horario') {
+          logger.info(
+            'campanha',
+            `Fora do horario de envio (${campanha.horario_inicio} as ${campanha.horario_fim}). Retoma sozinha as ${campanha.horario_inicio}.`
+          );
+        }
+        exec.fase = 'fora_horario';
+        exec.atual = null;
+        exec.pausaBlocoAte = null;
+        exec.proximoEnvioEm = Date.now() + ateAbrir;
+        this._emitir(id);
+        // acorda no maximo a cada 30 min: relogio do PC que dormiu ou mudou nao atrasa o inicio
+        const r = await esperaCancelavel(Math.min(ateAbrir, 30 * 60_000), exec.sinal);
+        if (r === 'cancelado') return;
+        if (msAteAbrir(campanha.horario_inicio, campanha.horario_fim) === 0) {
+          exec.enviadosNoBloco = 0;
+          logger.ok('campanha', `Horario de envio aberto: "${campanha.nome}" retomou a prospeccao.`);
+        }
+        continue;
+      }
 
       // --- travas de seguranca antes de cada envio ---
       if (!whatsapp.conectado) {
