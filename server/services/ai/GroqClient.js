@@ -86,7 +86,10 @@ async function comRetry(fn, tentativas = 2, { maxEsperaMs = TETO_ESPERA_MS } = {
       const status = err.groqStatus || err.status;
       const recuperavel = status === 429 || (status >= 500 && status < 600) || status === 504;
       if (!recuperavel || i === tentativas) break;
-      const espera = err.esperaMs ?? 1200 * (i + 1);
+      // No 429 o "try again in 1.3s" da Groq so vale se o pedido for pequeno: com
+      // a Skill inteira (~6.5k de 8k tokens/min) tentar logo estoura de novo e
+      // esgota as tentativas. Espera crescente ate a janela liberar de verdade.
+      const espera = status === 429 ? Math.max(err.esperaMs ?? 0, 5000 * (i + 1)) : err.esperaMs ?? 1200 * (i + 1);
       if (espera > maxEsperaMs) break;
       const motivo = status === 429 ? 'limite de tokens por minuto' : `erro ${status}`;
       logger.warn('groq', `Tentativa ${i + 1} barrada (${motivo}). Aguardando ${Math.round(espera / 1000)}s.`);
@@ -175,7 +178,9 @@ export async function completar({
               messages: mensagens
             }
           }),
-        2,
+        // tarefa de fundo (analise de resposta, campanha) pode esperar a janela
+        // de 1 minuto; acao na tela desiste antes e avisa
+        interativo ? 2 : 5,
         opcoesRetry
       );
       const conteudo = dados?.choices?.[0]?.message?.content ?? '';

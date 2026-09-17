@@ -30,9 +30,12 @@ export const MessageService = {
     }
 
     const cfg = settingsRepo.obterTodas();
-    const limite = Number(cfg.limite_diario || 0);
-    if (limite > 0 && messageRepo.enviadasHoje() >= limite) {
-      throw new AppError(`Limite diario de ${limite} mensagens atingido. Ajuste em Configuracoes.`, 429);
+    // O limite e da prospeccao: responder quem ja falou com voce nao conta.
+    if (campanha) {
+      const limite = settingsRepo.limiteDiarioEfetivo(cfg);
+      if (limite > 0 && messageRepo.enviadasHoje({ soCampanha: true }) >= limite) {
+        throw new AppError(`Limite diario de ${limite} mensagens de prospeccao atingido.`, 429);
+      }
     }
 
     try {

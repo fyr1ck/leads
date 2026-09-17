@@ -1,7 +1,7 @@
 import { carregarSkill } from './skillLoader.js';
 import { blocoConfig } from './SkillService.js';
 import { contextoDeHorario } from '../../utils/greeting.js';
-import { SLUGS_VALIDOS } from '../../domain/classificacao.js';
+import { SLUGS_VALIDOS, PIPELINE_SLUGS } from '../../domain/classificacao.js';
 import { config } from '../../config.js';
 
 const vazio = (v) => v === null || v === undefined || String(v).trim() === '';
@@ -24,15 +24,40 @@ export function contextoDoLead(lead = {}) {
 
 const REGRAS_SISTEMA = `REGRAS DO SISTEMA (obrigatorias, acima de qualquer criatividade):
 - Nunca inventar informacoes sobre o estabelecimento.
-- Nunca inventar resultados, clientes, depoimentos ou estatisticas da Henvix.
+- Nunca inventar resultados, clientes, depoimentos ou estatisticas da Henvixy.
 - Nunca inventar precos, descontos, promocoes ou prazos.
 - Usar SOMENTE os dados presentes no CONTEXTO DO LEAD. O que estiver como "nao informado" nao existe: nao cite.
 - Respeitar a saudacao dinamica informada no contexto de horario.
 - Personalizar a mensagem com os dados reais disponiveis.
-- Escrever como pessoa real (Joao Henrique), em portugues do Brasil, natural e direto.
+- Escrever como pessoa real (Henrique Camargo), em portugues do Brasil, natural e direto.
 - Nunca dizer que e IA, robo ou chatbot.
 - Nao parecer spam: mensagem curta, sem emojis em excesso, sem CAPS, sem links que nao foram fornecidos.
-- Seguir o fluxo comercial da Henvix descrito na Skill.`;
+- Seguir o fluxo comercial da Henvixy descrito na Skill.`;
+
+/**
+ * Quem e quem na conversa + os casos que mais aparecem na pratica.
+ * Sem isso o modelo confundia os papeis (respondia como se fosse a clinica) e
+ * tratava mensagem automatica do WhatsApp Business como resposta de uma pessoa.
+ */
+const SITUACAO_CONVERSA = `QUEM E QUEM (nunca confunda):
+- HENRIQUE CAMARGO (Henvixy) e o vendedor. Foi ele quem chamou o estabelecimento primeiro, oferecendo landing page ou site institucional.
+- CLIENTE e o estabelecimento prospectado (clinica, salao, loja...). Quem escreve pode ser o dono, uma secretaria/atendente ou um robo de atendimento.
+- Se nao aparecer nenhuma mensagem de Henrique na conversa, ela existiu mesmo assim: ele chamou primeiro oferecendo site.
+- Toda sugestao e escrita POR Henrique PARA o estabelecimento. Nunca escreva como o estabelecimento: nada de oferecer consulta, agendamento, planos, cardapio ou "como posso te ajudar?".
+
+CASOS COMUNS:
+1. MENSAGEM AUTOMATICA (boas-vindas, "aguarde que ja vamos atender", menu numerado, horario de funcionamento, "no momento nao estou disponivel", pedido de nome/CPF/plano para agendar): nao e uma pessoa. A resposta sugerida fica VAZIA (""), porque o certo e esperar um humano. Excecao: menu que so avanca escolhendo uma opcao -> sugira apenas a opcao de "outros assuntos" ou "falar com atendente".
+2. ATENDENTE OU SECRETARIA ("como posso ajudar?", "sou a secretaria"): em ate 2 linhas diga o motivo do contato (ideia de site/pagina para o estabelecimento) e pergunte quem cuida dessa parte ou se consegue falar com o responsavel.
+3. ENCAMINHOU PARA OUTRA PESSOA OU NUMERO ("fala com a Kamylle no numero X", "manda para o gerente"): a resposta sugerida e so um agradecimento curto nesta conversa, e o proximo passo e chamar a pessoa/numero indicado. Nunca escreva para a pessoa indicada como se ela estivesse nesta conversa.
+4. PEDIU INFORMACAO / COMO FUNCIONA / PODE MANDAR: explique em 2 linhas o que Henrique faria (pagina com os servicos, localizacao, avaliacoes e botao para chamar no WhatsApp) e faca uma pergunta para entender o negocio.
+5. PERGUNTOU PRECO sem preco autorizado na configuracao comercial: nao cite valor. Diga que depende do que o negocio precisa e faca 1 pergunta (ex.: uma pagina unica ou um site com varias paginas?).
+6. JA TEM SITE/INSTAGRAM ou NAO TEM INTERESSE: respeite. Uma linha educada, sem insistir; se houver abertura, uma pergunta leve.
+
+NUNCA:
+- Dizer que ja fez sites para o nicho, que tem modelo pronto, portfolio, clientes ou resultados, a menos que isso esteja na configuracao comercial.
+- Prometer "enviar um modelo". No maximo oferecer mostrar uma ideia de como ficaria.
+- Se apresentar de novo se Henrique ja se apresentou na conversa.
+- Escrever mais de 3 linhas curtas ou fazer mais de uma pergunta.`;
 
 function blocoSistema() {
   const skill = carregarSkill();
@@ -45,9 +70,9 @@ function blocoSistema() {
     configuracao = '';
   }
   return [
-    'Voce e o agente comercial da Henvix.',
+    'Voce e o agente comercial da Henvixy.',
     '',
-    '===== SKILL DE VENDAS DA HENVIX (fonte principal das regras) =====',
+    '===== SKILL DE VENDAS DA HENVIXY (fonte principal das regras) =====',
     skill ||
       '[ATENCAO: arquivo da Skill nao encontrado. Nao invente estrategia comercial: use apenas a abordagem padrao informada pelo sistema.]',
     '===== FIM DA SKILL =====',
@@ -73,12 +98,14 @@ export function promptPrimeiraMensagem(lead) {
     '',
     'REQUISITOS DA MENSAGEM:',
     '- Comece com a saudacao correta do contexto de horario.',
-    '- Apresente-se como Joao Henrique, da Henvix.',
+    '- Apresente-se como Henrique Camargo, da Henvixy.',
     '- Cite o nome do estabelecimento exatamente como esta no contexto.',
     temSite
       ? '- O estabelecimento JA POSSUI site. Nao diga que ele nao tem site. Foque em melhorar/complementar a presenca digital.'
       : '- O estabelecimento NAO possui site. Mencione isso de forma natural (percebi que ainda nao possuem um site proprio).',
-    '- Use a estrategia do modelo pronto da Skill e termine com uma pergunta de curiosidade (ex.: "Voces gostariam de ver como ficou?").',
+    '- Diga em uma frase que voce cria landing pages e sites institucionais. Nao afirme que ja criou um modelo ou site para eles.',
+    '- Termine com uma pergunta de curiosidade (ex.: "Posso te mostrar uma ideia do que faria para voces?").',
+    '- Tom: educado, mas leve e proximo. Trate por "voces", sem formalidade exagerada e sem girias.',
     '- Objetivo e apenas GERAR CURIOSIDADE E CONSEGUIR RESPOSTA. Nao tente fechar venda agora.',
     linkDemo ? '' : '- NAO envie nenhum link nesta mensagem.',
     '- Maximo de 6 linhas curtas. Sem markdown, sem aspas em volta, sem assinatura.',
@@ -92,7 +119,7 @@ export function promptPrimeiraMensagem(lead) {
 export function promptAnaliseResposta({ lead, mensagem, historico = [] }) {
   const conversa = historico
     .slice(-10)
-    .map((m) => `${m.direcao === 'IN' ? 'CLIENTE' : 'JOAO HENRIQUE'}: ${m.corpo}`)
+    .map((m) => `${m.direcao === 'IN' ? 'CLIENTE' : 'HENRIQUE CAMARGO'}: ${m.corpo}`)
     .join('\n');
 
   const usuario = [
@@ -107,7 +134,12 @@ export function promptAnaliseResposta({ lead, mensagem, historico = [] }) {
     '',
     `ULTIMA MENSAGEM RECEBIDA DO CLIENTE:\n"${String(mensagem).slice(0, 1500)}"`,
     '',
+    SITUACAO_CONVERSA,
+    '',
     'COMO CLASSIFICAR (analise o CONTEXTO, nao palavras isoladas):',
+    '- Mensagem automatica (caso 1) -> AGUARDANDO_RESPOSTA, prioridade BAIXA, score ate 30, sugestao_resposta "".',
+    '- Atendente perguntando como pode ajudar (caso 2) -> RESPONDEU',
+    '- Encaminhou para outra pessoa ou numero (caso 3) -> QUER_CONTATO, e diga no motivo quem/qual numero chamar.',
     '- "Pode mandar" / "Quero ver" -> INTERESSADO ou PEDIU_DEMONSTRACAO',
     '- "Quanto custa?" -> QUER_SABER_PRECO',
     '- "Como funciona?" -> INTERESSADO',
@@ -118,9 +150,9 @@ export function promptAnaliseResposta({ lead, mensagem, historico = [] }) {
     '',
     `ETIQUETAS PERMITIDAS (use exatamente uma destas em "status"): ${SLUGS_VALIDOS.join(', ')}`,
     'PRIORIDADES PERMITIDAS: MAXIMA, ALTA, MEDIA, BAIXA',
-    'ETAPAS PERMITIDAS: NOVOS, RESPONDERAM, INTERESSADOS, DEMONSTRACAO, NEGOCIACAO, FECHAMENTO, CLIENTE',
+    `ETAPAS PERMITIDAS: ${PIPELINE_SLUGS.join(', ')}`,
     '',
-    'A "sugestao_resposta" deve seguir a Skill da Henvix, ser curta, natural, sem inventar preco/prazo/resultado.',
+    'A "sugestao_resposta" segue os CASOS COMUNS acima e a Skill da Henvixy: curta, natural, sem inventar preco/prazo/resultado.',
     'O "score" e o potencial de fechamento de 0 a 100, baseado na conversa real.',
     '',
     'RESPONDA SOMENTE COM JSON VALIDO neste formato exato:',
@@ -129,9 +161,9 @@ export function promptAnaliseResposta({ lead, mensagem, historico = [] }) {
     '  "confianca": 0.94,',
     '  "prioridade": "MAXIMA",',
     '  "score": 88,',
-    '  "motivo": "O estabelecimento pediu para visualizar o modelo.",',
-    '  "proxima_etapa": "DEMONSTRACAO",',
-    '  "sugestao_resposta": "Claro! Vou te enviar o modelo..."',
+    '  "motivo": "O dono pediu para entender como seria a pagina.",',
+    '  "proxima_etapa": "INTERESSADO",',
+    '  "sugestao_resposta": "Que bom! A ideia e uma pagina com os servicos, a localizacao e um botao para chamar voces no WhatsApp. Hoje a maioria dos clientes chega pelo Google ou por indicacao?"',
     '}'
   ].join('\n');
 
@@ -142,7 +174,7 @@ export function promptAnaliseResposta({ lead, mensagem, historico = [] }) {
 export function promptCopiloto({ lead, historico = [], memoria = '' }) {
   const conversa = historico
     .slice(-16)
-    .map((m) => `${m.direcao === 'IN' ? 'CLIENTE' : 'JOAO HENRIQUE'}: ${m.corpo}`)
+    .map((m) => `${m.direcao === 'IN' ? 'CLIENTE' : 'HENRIQUE CAMARGO'}: ${m.corpo}`)
     .join('\n');
 
   const usuario = [
@@ -157,14 +189,16 @@ export function promptCopiloto({ lead, historico = [], memoria = '' }) {
     'CONVERSA:',
     conversa || '(sem mensagens ainda)',
     '',
+    SITUACAO_CONVERSA,
+    '',
     'Analise e responda em JSON:',
     '- resumo: 1 a 2 frases sobre onde a conversa esta.',
     '- intencao: o que o cliente quer agora, em poucas palavras.',
     '- objecao: a objecao real (ou "nenhuma identificada").',
     '- temperatura: QUENTE, MORNO, FRIO ou GELADO.',
     '- proxima_acao: a acao comercial mais util agora, em uma frase.',
-    '- resposta_sugerida: a mensagem pronta para o vendedor revisar, seguindo a Skill,',
-    '  curta, natural, sem inventar preco, prazo ou resultado.',
+    '- resposta_sugerida: a mensagem pronta para o vendedor revisar, seguindo os CASOS COMUNS e a Skill,',
+    '  curta, natural, sem inventar preco, prazo ou resultado. Vazia ("") se a ultima mensagem for automatica.',
     '',
     'RESPONDA SOMENTE COM JSON VALIDO.'
   ]
@@ -178,7 +212,7 @@ export function promptCopiloto({ lead, historico = [], memoria = '' }) {
 export function promptFollowUp({ lead, historico = [], dias = 1, memoria = '' }) {
   const conversa = historico
     .slice(-10)
-    .map((m) => `${m.direcao === 'IN' ? 'CLIENTE' : 'JOAO HENRIQUE'}: ${m.corpo}`)
+    .map((m) => `${m.direcao === 'IN' ? 'CLIENTE' : 'HENRIQUE CAMARGO'}: ${m.corpo}`)
     .join('\n');
 
   const usuario = [
@@ -192,6 +226,8 @@ export function promptFollowUp({ lead, historico = [], dias = 1, memoria = '' })
     '',
     'CONVERSA ATE AQUI:',
     conversa || '(apenas a abordagem inicial)',
+    '',
+    SITUACAO_CONVERSA,
     '',
     'REGRAS DO FOLLOW-UP:',
     '- Curto: no maximo 3 linhas.',
@@ -213,7 +249,7 @@ export function promptFollowUp({ lead, historico = [], dias = 1, memoria = '' })
 export function promptProximoPasso({ lead, historico = [] }) {
   const conversa = historico
     .slice(-12)
-    .map((m) => `${m.direcao === 'IN' ? 'CLIENTE' : 'JOAO HENRIQUE'}: ${m.corpo}`)
+    .map((m) => `${m.direcao === 'IN' ? 'CLIENTE' : 'HENRIQUE CAMARGO'}: ${m.corpo}`)
     .join('\n');
   const usuario = [
     'TAREFA: sugerir a proxima mensagem que o vendedor humano poderia enviar.',
@@ -227,7 +263,9 @@ export function promptProximoPasso({ lead, historico = [] }) {
     '',
     `Etiqueta atual: ${lead.etiqueta || 'sem etiqueta'}`,
     '',
-    'Escreva no maximo 4 linhas, seguindo a Skill, sem inventar preco, prazo ou resultado.',
+    SITUACAO_CONVERSA,
+    '',
+    'Escreva no maximo 3 linhas, seguindo os CASOS COMUNS e a Skill, sem inventar preco, prazo ou resultado.',
     'RESPONDA APENAS COM O TEXTO DA MENSAGEM.'
   ].join('\n');
   return { sistema: blocoSistema(), usuario };

@@ -58,6 +58,16 @@ test('telefone confirmado: envia para o JID que o WhatsApp devolveu (nono digito
   assert.equal(r.jid, '551691234567@s.whatsapp.net');
 });
 
+test('consulta do numero avisa o LID devolvido pelo WhatsApp', async () => {
+  const { p } = providerCom({
+    onWhatsApp: async () => [{ exists: true, jid: '5516991234567@s.whatsapp.net', lid: '264514553557138' }]
+  });
+  const avisos = [];
+  p.on('numeroCompartilhado', (d) => avisos.push(d));
+  await p.consultarNumero('5516991234567');
+  assert.deepEqual(avisos, [{ lid: '264514553557138@lid', telefone: '5516991234567' }]);
+});
+
 test('endereco de conversa (LID) vai direto, sem consultar numero', async () => {
   let consultou = false;
   const { p, enviadas } = providerCom({

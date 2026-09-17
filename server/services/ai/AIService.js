@@ -87,7 +87,7 @@ export function mensagemPadraoDaSkill(lead) {
   const linhas = [
     `${saudacao}! Tudo bem?`,
     '',
-    'Meu nome é João Henrique, sou da Henvix.',
+    'Aqui é o Henrique Camargo, da Henvixy.',
     '',
     `Estava analisando alguns estabelecimentos${cidade} e encontrei a ${nome}.`,
     '',
@@ -95,9 +95,9 @@ export function mensagemPadraoDaSkill(lead) {
       ? 'Achei o trabalho de vocês interessante e dei uma olhada na página de vocês.'
       : 'Achei o trabalho de vocês interessante e percebi que vocês ainda não possuem um site próprio.',
     '',
-    'Inclusive, já criei um modelo pensando justamente no tipo de negócio de vocês.',
+    'Eu crio landing pages e sites institucionais para negócios como o de vocês.',
     '',
-    'Vocês gostariam de ver como ficou?'
+    'Posso te mostrar uma ideia do que faria para vocês?'
   ];
   return linhas.join('\n');
 }
@@ -112,6 +112,14 @@ export function classificarHeuristico(texto) {
     .normalize('NFD')
     .replace(/[̀-ͯ]/g, '');
   const tem = (...termos) => termos.some((x) => t.includes(x));
+  // palavra inteira: "pode" nao pode casar com "podemos"
+  const palavra = (...termos) => termos.some((x) => new RegExp(`\\b${x}\\b`).test(t));
+
+  // Robo do WhatsApp Business (boas-vindas, menu, horario): ninguem respondeu ainda.
+  if (tem('seja bem vindo', 'seja bem-vindo', 'aguarde', 'horario de funcionamento', 'nao estou disponivel', 'respondemos por ordem', 'digite o numero', 'escolha uma opcao'))
+    return { status: 'AGUARDANDO_RESPOSTA', score: 30, confianca: 0.5 };
+  if (tem('como podemos ajudar', 'como posso ajudar', 'em que posso ajudar'))
+    return { status: 'RESPONDEU', score: 50, confianca: 0.5 };
 
   if (tem('nao tenho interesse', 'sem interesse', 'nao quero', 'nao me interessa', 'para de mandar', 'nao precisa'))
     return { status: 'NAO_INTERESSADO', score: 10, confianca: 0.6 };
@@ -133,7 +141,7 @@ export function classificarHeuristico(texto) {
   if (falaDeSite) return { status: 'JA_POSSUI_SITE', score: 30, confianca: 0.55 };
   if (tem('me liga', 'pode ligar', 'meu contato', 'fala com', 'whatsapp do'))
     return { status: 'QUER_CONTATO', score: 65, confianca: 0.5 };
-  if (tem('sim', 'claro', 'pode', 'quero', 'bora', 'vamos'))
+  if (palavra('sim', 'claro', 'pode', 'quero', 'bora', 'vamos'))
     return { status: 'INTERESSADO', score: 70, confianca: 0.45 };
   return { status: 'REVISAR_MANUALMENTE', score: 40, confianca: 0.3 };
 }
@@ -324,7 +332,7 @@ export const AIService = {
     if (!hasGroqKey()) {
       const saudacao = saudacaoDinamica();
       return {
-        mensagem: `${saudacao}! Passando para saber se você chegou a ver o modelo que preparei para a ${lead.nome_estabelecimento}.\n\nSe quiser, posso te explicar rapidinho como ficaria. Faz sentido para vocês?`,
+        mensagem: `${saudacao}! Passando para saber se faz sentido eu te mostrar a ideia de página que pensei para a ${lead.nome_estabelecimento}.\n\nSe quiser, posso te explicar rapidinho como ficaria. Faz sentido para vocês?`,
         origem: 'SKILL_PADRAO'
       };
     }
@@ -339,7 +347,7 @@ export const AIService = {
       logger.warn('ia', `Follow-up via Groq falhou (${err.message}). Usando texto padrao.`);
       const saudacao = saudacaoDinamica();
       return {
-        mensagem: `${saudacao}! Passando para saber se você chegou a ver o modelo que preparei para a ${lead.nome_estabelecimento}.\n\nSe quiser, posso te explicar rapidinho como ficaria. Faz sentido para vocês?`,
+        mensagem: `${saudacao}! Passando para saber se faz sentido eu te mostrar a ideia de página que pensei para a ${lead.nome_estabelecimento}.\n\nSe quiser, posso te explicar rapidinho como ficaria. Faz sentido para vocês?`,
         origem: 'SKILL_PADRAO'
       };
     }

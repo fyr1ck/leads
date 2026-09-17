@@ -262,7 +262,14 @@ export class BaileysProvider extends EventEmitter {
   async consultarNumero(telefoneE164) {
     if (!this.sock || this.status !== 'CONECTADO') throw new Error('WhatsApp not connected');
     const resultados = await this.sock.onWhatsApp(...variantesBR(telefoneE164));
-    return (resultados || []).find((r) => r?.exists)?.jid || null;
+    const achado = (resultados || []).find((r) => r?.exists);
+    // A consulta tambem devolve o LID. Guardar agora e o que permite reconhecer
+    // a resposta que chega so por LID, sem o numero junto.
+    if (achado?.lid) {
+      const lid = String(achado.lid).includes('@') ? String(achado.lid) : `${achado.lid}@lid`;
+      this.emit('numeroCompartilhado', { lid, telefone: telefoneE164 });
+    }
+    return achado?.jid || null;
   }
 
   /** Versao tolerante (usada em consultas informativas): falha vira null. */

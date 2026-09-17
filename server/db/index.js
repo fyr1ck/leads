@@ -110,9 +110,13 @@ export function migrar() {
     search_id: 'INTEGER',
     descoberto_em: 'TEXT',
     // endereco exato da conversa no WhatsApp (xxx@s.whatsapp.net ou xxx@lid)
-    wa_jid: 'TEXT'
+    wa_jid: 'TEXT',
+    // LID que o WhatsApp devolve ao consultar o numero: a resposta pode chegar
+    // por ele (xxx@lid) sem o telefone junto
+    wa_lid: 'TEXT'
   });
   db.exec('CREATE INDEX IF NOT EXISTS ix_leads_wa_jid ON leads(wa_jid)');
+  db.exec('CREATE INDEX IF NOT EXISTS ix_leads_wa_lid ON leads(wa_lid)');
   // buscas da deduplicacao: sem indice, cada linha importada varria a base inteira
   db.exec('CREATE INDEX IF NOT EXISTS ix_leads_google_maps ON leads(google_maps)');
   db.exec('CREATE INDEX IF NOT EXISTS ix_leads_place_id ON leads(place_id)');

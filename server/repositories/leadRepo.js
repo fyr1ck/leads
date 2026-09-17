@@ -70,6 +70,20 @@ export const porGoogleMaps = (url) =>
 /** Lead pelo endereco exato da conversa no WhatsApp. */
 export const porWaJid = (jid) => (jid ? get('SELECT * FROM leads WHERE wa_jid = ?', jid) : null);
 
+/** Lead cujo LID ja foi revelado pelo WhatsApp (ao consultar o numero antes do envio). */
+export const porWaLid = (lid) => (lid ? get('SELECT * FROM leads WHERE wa_lid = ?', lid) : null);
+
+/** Respostas que chegaram so com LID e nao se ligaram a nenhum lead prospectado. */
+export const orfaosDeLid = () =>
+  all("SELECT id FROM leads WHERE origem = 'WHATSAPP_INBOUND' AND telefone_e164 IS NULL AND wa_jid LIKE '%@lid'");
+
+/** Ja receberam mensagem, mas ainda nao sabemos o LID deles. */
+export const contatadosSemLid = () =>
+  all(
+    `SELECT * FROM leads WHERE wa_lid IS NULL AND telefone_e164 IS NOT NULL AND quantidade_mensagens_enviadas > 0
+     ORDER BY data_ultimo_contato DESC LIMIT 300`
+  );
+
 /**
  * Lead criado a partir de uma mensagem recebida.
  * Sem telefone (contato que chegou so com LID) a chave de duplicidade e o
@@ -148,7 +162,8 @@ export function mesclar(destinoId, origemId) {
       ultima_mensagem_data: ultima?.created_at ?? destino.ultima_mensagem_data,
       etiqueta: destino.etiqueta || origem?.etiqueta || null,
       prioridade: destino.prioridade || origem?.prioridade || null,
-      wa_jid: origem?.wa_jid || destino.wa_jid
+      wa_jid: origem?.wa_jid || destino.wa_jid,
+      wa_lid: destino.wa_lid || origem?.wa_lid || null
     });
     run('DELETE FROM leads WHERE id = ?', origemId);
     return porId(destinoId);
@@ -229,7 +244,7 @@ const COLUNAS_EDITAVEIS = new Set([
   // v2 - Sales OS
   'estado', 'nicho', 'place_id', 'avaliacao', 'total_avaliacoes', 'status_site',
   'temperatura', 'score_motivos', 'proxima_acao', 'proximo_followup', 'search_id', 'descoberto_em',
-  'wa_jid'
+  'wa_jid', 'wa_lid'
 ]);
 
 export function atualizar(id, patch = {}) {

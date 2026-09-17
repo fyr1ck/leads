@@ -1,5 +1,6 @@
 import { all, get, run, pluck, tx } from '../db/index.js';
 import { SLUGS_QUENTES, SLUGS_FRIOS } from '../domain/classificacao.js';
+import { faixaSegura } from '../utils/delay.js';
 
 const listaSql = (arr) => arr.map((s) => `'${s}'`).join(',');
 
@@ -14,6 +15,7 @@ export function criar({
   horario_inicio = null,
   horario_fim = null
 }) {
+  ({ min: delay_min, max: delay_max } = faixaSegura(delay_min, delay_max));
   const r = run(
     `INSERT INTO campaigns (nome, quantidade_alvo, delay_min, delay_max, bloco_tamanho, bloco_pausa_minutos, filtros,
                             horario_inicio, horario_fim, status)

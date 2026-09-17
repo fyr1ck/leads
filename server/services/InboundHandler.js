@@ -29,8 +29,9 @@ function garantirLead(msg) {
   const e164 = msg.telefone ? normalizarTelefone(msg.telefone) : null;
   if (!e164 && !msg.jid) return null;
 
-  // 1) pelo endereco exato da conversa  2) pelo numero real
-  const existente = leadRepo.porWaJid(msg.jid) || (e164 && leadRepo.porTelefone(e164)) || null;
+  // 1) pelo endereco exato da conversa  2) pelo LID guardado no envio  3) pelo numero real
+  const existente =
+    leadRepo.porWaJid(msg.jid) || leadRepo.porWaLid(msg.lid) || (e164 && leadRepo.porTelefone(e164)) || null;
 
   if (existente) {
     const patch = {};
@@ -66,18 +67,19 @@ export function vincularNumero({ lid, telefone }) {
   try {
     const e164 = normalizarTelefone(telefone);
     if (!lid || !e164) return;
-    const doLid = leadRepo.porWaJid(lid);
+    const doLid = leadRepo.porWaJid(lid) || leadRepo.porWaLid(lid);
     const doTelefone = leadRepo.porTelefone(e164);
 
     if (doLid && doTelefone && doLid.id !== doTelefone.id) {
-      const unido = leadRepo.mesclar(doTelefone.id, doLid.id);
+      leadRepo.mesclar(doTelefone.id, doLid.id);
+      const unido = leadRepo.atualizar(doTelefone.id, { wa_lid: lid });
       ScoreService.recalcular(unido.id, { silencioso: true });
       logger.ok('inbox', `Conversa por LID unida ao lead ${unido.nome_estabelecimento}.`);
       bus.emit(EVENTOS.LEAD_ATUALIZADO, { lead: unido });
     } else if (doLid && !doTelefone && !doLid.telefone_e164) {
       bus.emit(EVENTOS.LEAD_ATUALIZADO, { lead: leadRepo.atualizar(doLid.id, { telefone_e164: e164, telefone: e164 }) });
-    } else if (!doLid && doTelefone && !doTelefone.wa_jid) {
-      leadRepo.atualizar(doTelefone.id, { wa_jid: lid });
+    } else if (!doLid && doTelefone) {
+      leadRepo.atualizar(doTelefone.id, doTelefone.wa_jid ? { wa_lid: lid } : { wa_jid: lid, wa_lid: lid });
     }
   } catch (err) {
     logger.warn('inbox', `Nao consegui vincular numero ao LID: ${err.message}`);
@@ -108,6 +110,15 @@ export async function repararContatosLid() {
   if (corrigidos) {
     logger.ok('inbox', `${corrigidos} contato(s) com LID gravado como telefone foram corrigidos.`);
     bus.emit(EVENTOS.STATS, {});
+  }
+
+  // Respostas que chegaram por LID antes de o LID ser guardado no envio viraram
+  // "Contato do WhatsApp" sem historico. Consultar o numero de quem ja foi
+  // contatado revela o LID (evento numeroCompartilhado) e junta as conversas.
+  if (leadRepo.orfaosDeLid().length) {
+    for (const lead of leadRepo.contatadosSemLid()) {
+      await whatsapp.consultarNumero(lead.telefone_e164).catch(() => {});
+    }
   }
 }
 

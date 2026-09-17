@@ -1,3 +1,5 @@
+import { config } from '../config.js';
+
 /** Espera cancelavel - permite PAUSAR/PARAR a campanha na hora (spec 14). */
 export function esperaCancelavel(ms, sinal) {
   return new Promise((resolve) => {
@@ -12,6 +14,17 @@ export function esperaCancelavel(ms, sinal) {
     }, ms);
     sinal?.registrar?.(fim);
   });
+}
+
+/**
+ * DELAY_MIN do .env e o piso de seguranca: intervalo menor digitado no painel
+ * ou gravado numa campanha antiga e puxado para cima. Com 5-10s o WhatsApp
+ * restringiu o numero por envio em massa.
+ */
+export function faixaSegura(minSeg, maxSeg) {
+  const piso = Math.max(1, Number(config.operacao.delayMin) || 1);
+  const min = Math.max(piso, Number(minSeg) || piso);
+  return { min, max: Math.max(min, Number(maxSeg) || min) };
 }
 
 /** Intervalo aleatorio dentro da faixa configurada - nunca fixo (spec 13). */

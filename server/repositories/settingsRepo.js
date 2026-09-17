@@ -29,6 +29,17 @@ const PADROES = () => ({
   wa_etiquetas_sync: 1
 });
 
+/**
+ * LIMITE_DIARIO do .env e o teto: o painel pode baixar, nunca subir
+ * (0 no .env = sem teto). Conta so mensagens de prospeccao.
+ */
+export function limiteDiarioEfetivo(cfg = obterTodas()) {
+  const teto = Number(config.operacao.limiteDiario) || 0;
+  const painel = Number(cfg.limite_diario) || 0;
+  if (!teto) return painel;
+  return painel > 0 ? Math.min(painel, teto) : teto;
+}
+
 const CHAVES_NUMERICAS = new Set([
   'delay_min', 'delay_max', 'bloco_tamanho', 'bloco_pausa_minutos', 'limite_diario',
   'max_erros_consecutivos', 'ia_analise_automatica', 'ia_resposta_automatica',

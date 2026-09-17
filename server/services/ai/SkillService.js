@@ -22,7 +22,7 @@ const CHAVE = 'skill_config';
 
 export const CONFIG_PADRAO = {
   tom: 'Natural, consultivo e direto. Portugues do Brasil, sem formalidade exagerada.',
-  servicos: 'Sites profissionais, landing pages, sites institucionais, paginas de vendas, catalogos digitais e paginas integradas ao WhatsApp.',
+  servicos: 'Landing pages e sites institucionais.',
   precos: '',
   prazo: '',
   formas_pagamento: '',

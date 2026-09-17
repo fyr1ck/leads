@@ -76,11 +76,12 @@ export const totalNaoLidas = () =>
   Number(pluck("SELECT COUNT(*) AS n FROM messages WHERE direcao = 'IN' AND lida = 0") || 0);
 
 /** Enviadas hoje - usado pelo limite diario (spec 54). */
-export const enviadasHoje = () =>
+export const enviadasHoje = ({ soCampanha = false } = {}) =>
   Number(
     pluck(
       `SELECT COUNT(*) AS n FROM messages
-        WHERE direcao = 'OUT' AND status = 'ENVIADA' AND date(created_at) = date('now', 'localtime')`
+        WHERE direcao = 'OUT' AND status = 'ENVIADA' AND date(created_at) = date('now', 'localtime')
+        ${soCampanha ? 'AND campaign_id IS NOT NULL' : ''}`
     ) || 0
   );
 

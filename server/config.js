@@ -75,9 +75,9 @@ export const config = {
     maxResultados: num(process.env.PLACES_MAX_RESULTADOS, 60)
   },
   operacao: {
-    limiteDiario: num(process.env.LIMITE_DIARIO, 200),
-    delayMin: num(process.env.DELAY_MIN, 30),
-    delayMax: num(process.env.DELAY_MAX, 90),
+    limiteDiario: num(process.env.LIMITE_DIARIO, 30),
+    delayMin: num(process.env.DELAY_MIN, 60),
+    delayMax: num(process.env.DELAY_MAX, 180),
     blocoTamanho: num(process.env.BLOCO_TAMANHO, 10),
     blocoPausaMinutos: num(process.env.BLOCO_PAUSA_MINUTOS, 5),
     maxErrosConsecutivos: num(process.env.MAX_ERROS_CONSECUTIVOS, 3),

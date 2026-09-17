@@ -21,6 +21,7 @@ process.env.WA_SESSION_DIR = path.join(tmp, 'wa');
 process.env.GROQ_API_KEY = '';
 process.env.DELAY_MIN = '1';
 process.env.DELAY_MAX = '1';
+process.env.LIMITE_DIARIO = '0'; // nao depender do .env de quem roda o teste
 process.env.BLOCO_TAMANHO = '0';
 
 const { migrar, all } = await import('../server/db/index.js');
@@ -38,6 +39,8 @@ const { default: LabelService } = await import('../server/services/whatsapp/Labe
 const { classificarHeuristico } = await import('../server/services/ai/AIService.js');
 const { saudacaoDinamica } = await import('../server/utils/greeting.js');
 const { normalizarTelefone } = await import('../server/utils/phone.js');
+const { faixaSegura } = await import('../server/utils/delay.js');
+const configModulo = await import('../server/config.js');
 
 /** Provider falso: implementa o mesmo contrato do BaileysProvider. */
 class FakeProvider extends EventEmitter {
@@ -54,6 +57,7 @@ class FakeProvider extends EventEmitter {
     this.etiquetas = new Map();
     this.chatsEtiquetados = new Map(); // jid -> Set(labelId)
     this.semWhatsApp = new Set(); // numeros que nao existem no WhatsApp
+    this.lids = new Map(); // telefone -> LID devolvido pela consulta
   }
   listarEtiquetas() {
     return [...this.etiquetas.values()];
@@ -84,6 +88,8 @@ class FakeProvider extends EventEmitter {
     return this.semWhatsApp.has(String(tel)) ? null : `${tel}@s.whatsapp.net`;
   }
   async consultarNumero(tel) {
+    const lid = this.lids.get(String(tel));
+    if (lid) this.emit('numeroCompartilhado', { lid, telefone: tel });
     return this.existeNoWhatsApp(tel);
   }
   async enviarTexto(tel, texto) {
@@ -184,7 +190,7 @@ test('campanha envia, respeita a fila e nao repete telefone', async () => {
   // a mensagem gerada segue a Skill (saudacao + apresentacao)
   const ultima = fake.enviadas.at(-1).texto;
   assert.match(ultima, /Bom dia|Boa tarde|Boa noite/);
-  assert.match(ultima, /João Henrique/);
+  assert.match(ultima, /Henrique Camargo/);
 
   // segunda campanha com os mesmos leads: tudo ignorado (spec 10)
   const c2 = campaignRepo.criar({ nome: 'Repetida', delay_min: 1, delay_max: 1, bloco_tamanho: 0 });
@@ -374,6 +380,55 @@ test('quando o WhatsApp revela o numero, a conversa por LID se junta ao lead do 
   assert.equal(unido.wa_jid, '112233445566778@lid');
   assert.equal(unido.respondeu, 1);
   assert.equal(messageRepo.doLead(unido.id).filter((m) => m.direcao === 'IN').length, 1, 'a mensagem veio junto');
+});
+
+test('travas do .env: painel nao deixa o intervalo nem o limite diario mais agressivos', () => {
+  const { config } = configModulo;
+  const antes = { ...config.operacao };
+  try {
+    config.operacao.delayMin = 60;
+    config.operacao.limiteDiario = 30;
+    assert.deepEqual(faixaSegura(5, 10), { min: 60, max: 60 }, 'os 5-10s que restringiram o numero');
+    assert.deepEqual(faixaSegura(90, 180), { min: 90, max: 180 }, 'mais conservador que o piso continua valendo');
+    assert.equal(settingsRepo.limiteDiarioEfetivo({ limite_diario: 200 }), 30);
+    assert.equal(settingsRepo.limiteDiarioEfetivo({ limite_diario: 0 }), 30, '0 no painel nao tira o teto');
+    assert.equal(settingsRepo.limiteDiarioEfetivo({ limite_diario: 10 }), 10);
+  } finally {
+    Object.assign(config.operacao, antes);
+  }
+});
+
+test('classificacao local: robo do WhatsApp Business nao vira interessado', () => {
+  assert.equal(classificarHeuristico('Seja bem-vindo(a) a Odonto+! Aguarde que ja vamos te atender').status, 'AGUARDANDO_RESPOSTA');
+  assert.equal(classificarHeuristico('Bartolomeu Clinic agradece seu contato. Como podemos ajudar?').status, 'RESPONDEU');
+  assert.equal(classificarHeuristico('sim, tenho interesse sim').status, 'INTERESSADO');
+});
+
+test('resposta so por LID (sem numero) cai no lead prospectado, antes e depois de conectar', async () => {
+  await whatsapp.conectar();
+
+  // envio novo: a consulta do numero revela o LID e ele fica guardado no lead
+  const { lead: novo } = leadRepo.criarOuEnriquecer({ nome_estabelecimento: 'Clinica Sorriso LID', telefone: '16995551111' });
+  fake.lids.set('5516995551111', '555000111222333@lid');
+  await whatsapp.consultarNumero('5516995551111');
+  const totalAntes = all('SELECT COUNT(*) AS n FROM leads')[0].n;
+
+  fake.receberDe({ jid: '555000111222333@lid', texto: 'Seja bem-vindo! Aguarde que ja vamos atender.', pushName: null });
+  await esperar(900);
+  assert.equal(all('SELECT COUNT(*) AS n FROM leads')[0].n, totalAntes, 'nao pode virar "Contato do WhatsApp" solto');
+  assert.equal(leadRepo.porId(novo.id).respondeu, 1);
+
+  // resposta que ja tinha chegado solta: ao conectar, junta com quem foi contatado
+  const { lead: antigo } = leadRepo.criarOuEnriquecer({ nome_estabelecimento: 'Odonto Orfa', telefone: '16995552222' });
+  leadRepo.atualizar(antigo.id, { quantidade_mensagens_enviadas: 1 });
+  const orfao = leadRepo.criarDeWhatsApp({ nome: 'Contato do WhatsApp', wa_jid: '555000222333444@lid' });
+  messageRepo.registrar({ lead_id: orfao.id, direcao: 'IN', corpo: 'Como podemos ajudar?', status: 'RECEBIDA', autor: 'CLIENTE' });
+  fake.lids.set('5516995552222', '555000222333444@lid');
+
+  await repararContatosLid();
+
+  assert.equal(leadRepo.porId(orfao.id), undefined, 'o contato solto some');
+  assert.equal(messageRepo.doLead(antigo.id).filter((m) => m.direcao === 'IN').length, 1, 'a resposta vai para o lead certo');
 });
 
 test('lead antigo com LID gravado como telefone e corrigido ao conectar', async () => {

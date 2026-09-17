@@ -9,7 +9,7 @@ import * as settingsRepo from '../repositories/settingsRepo.js';
 import { bus, EVENTOS } from '../realtime/bus.js';
 import { logger } from '../utils/logger.js';
 import { AppError, mensagemAmigavel } from '../utils/errors.js';
-import { criarSinal, esperaCancelavel, delayAleatorio } from '../utils/delay.js';
+import { criarSinal, esperaCancelavel, delayAleatorio, faixaSegura } from '../utils/delay.js';
 import { temJanela, msAteAbrir } from '../utils/horario.js';
 
 /**
@@ -270,9 +270,9 @@ class CampaignRunner {
       }
 
       const cfg = settingsRepo.obterTodas();
-      const limite = Number(cfg.limite_diario || 0);
-      if (limite > 0 && messageRepo.enviadasHoje() >= limite) {
-        this.pausar(id, `Limite diario de ${limite} mensagens atingido.`, { automatico: true });
+      const limite = settingsRepo.limiteDiarioEfetivo(cfg);
+      if (limite > 0 && messageRepo.enviadasHoje({ soCampanha: true }) >= limite) {
+        this.pausar(id, `Limite diario de ${limite} mensagens de prospeccao atingido. Continue amanha.`, { automatico: true });
         return;
       }
 
@@ -377,7 +377,9 @@ class CampaignRunner {
         if (r === 'cancelado') return;
       } else {
         // --- delay aleatorio entre mensagens (spec 13) ---
-        const ms = delayAleatorio(campanha.delay_min ?? cfg.delay_min, campanha.delay_max ?? cfg.delay_max);
+        // piso do .env vale tambem para campanha criada antes da trava
+        const faixa = faixaSegura(campanha.delay_min ?? cfg.delay_min, campanha.delay_max ?? cfg.delay_max);
+        const ms = delayAleatorio(faixa.min, faixa.max);
         exec.fase = 'aguardando';
         exec.proximoEnvioEm = Date.now() + ms;
         logger.debug('campanha', `Aguardando ${Math.round(ms / 1000)}s ate o proximo envio.`);
