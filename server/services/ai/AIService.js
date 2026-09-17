@@ -102,6 +102,12 @@ export function mensagemPadraoDaSkill(lead) {
   return linhas.join('\n');
 }
 
+/** Robo do WhatsApp Business (boas-vindas, menu, horario): ninguem respondeu ainda. */
+export function ehMensagemAutomatica(texto) {
+  const t = String(texto || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+  return ['seja bem vindo', 'seja bem-vindo', 'aguarde', 'horario de funcionamento', 'nao estou disponivel', 'respondemos por ordem', 'digite o numero', 'escolha uma opcao'].some((x) => t.includes(x));
+}
+
 /**
  * Classificador local de emergencia (Groq fora do ar).
  * Cobre os exemplos da spec 18 e marca origem HEURISTICA para o operador saber.
@@ -115,9 +121,7 @@ export function classificarHeuristico(texto) {
   // palavra inteira: "pode" nao pode casar com "podemos"
   const palavra = (...termos) => termos.some((x) => new RegExp(`\\b${x}\\b`).test(t));
 
-  // Robo do WhatsApp Business (boas-vindas, menu, horario): ninguem respondeu ainda.
-  if (tem('seja bem vindo', 'seja bem-vindo', 'aguarde', 'horario de funcionamento', 'nao estou disponivel', 'respondemos por ordem', 'digite o numero', 'escolha uma opcao'))
-    return { status: 'AGUARDANDO_RESPOSTA', score: 30, confianca: 0.5 };
+  if (ehMensagemAutomatica(texto)) return { status: 'AGUARDANDO_RESPOSTA', score: 30, confianca: 0.5 };
   if (tem('como podemos ajudar', 'como posso ajudar', 'em que posso ajudar'))
     return { status: 'RESPONDEU', score: 50, confianca: 0.5 };
 
@@ -241,6 +245,14 @@ export const AIService = {
    * Retorna sugestao de resposta, mas QUEM ENVIA E O OPERADOR.
    */
   async analisarResposta({ lead, mensagem, historico = [] }) {
+    // Robo de boas-vindas nao tem o que responder e cada chamada gasta o limite
+    // diario da Groq (~30 analises/dia no plano gratuito): fica para o atendente.
+    if (ehMensagemAutomatica(mensagem)) {
+      return normalizarAnalise(
+        { ...classificarHeuristico(mensagem), motivo: 'Mensagem automatica do WhatsApp Business. Aguarde um atendente responder.' },
+        { texto: mensagem, origem: 'HEURISTICA' }
+      );
+    }
     if (!hasGroqKey()) {
       const h = classificarHeuristico(mensagem);
       return normalizarAnalise(

@@ -18,6 +18,12 @@ export function mensagemAmigavel(err) {
   // texto: "Used 7401 tokens" contem "401" e aparecia como "chave invalida".
   const statusGroq = err?.groqStatus;
   if (statusGroq === 429 || /rate limit|tokens per minute|requests per minute/i.test(raw)) {
+    if (err?.esperaMs > 60_000 || /tokens per day|limite diario/i.test(raw)) {
+      const min = err?.esperaMs ? Math.ceil(err.esperaMs / 60_000) : null;
+      return `A IA atingiu o limite diario do plano gratuito da Groq. ${
+        min ? `Volta em cerca de ${min} min.` : 'Tente de novo mais tarde.'
+      }`;
+    }
     const seg = err?.esperaMs ? Math.ceil(err.esperaMs / 1000) : null;
     return `A IA atingiu o limite de uso por minuto do plano gratuito da Groq. ${
       seg ? `Tente de novo em ${seg}s.` : 'Aguarde cerca de um minuto e tente de novo.'

@@ -63,12 +63,17 @@ async function chamar(caminho, { method = 'POST', body, timeout = TIMEOUT_MS } =
 const TETO_ESPERA_MS = 40_000;
 
 function esperaSugerida(resp, dados) {
+  // Sem teto aqui: o limite DIARIO pede "27m2.16s", e cortar isso em 40s fazia
+  // o sistema tentar 5 vezes algo que so libera meia hora depois.
   const header = Number(resp.headers.get('retry-after'));
-  if (Number.isFinite(header) && header > 0) return Math.min(TETO_ESPERA_MS, header * 1000);
-  const m = /try again in ([\d.]+)\s*s/i.exec(dados?.error?.message || '');
-  if (m) return Math.min(TETO_ESPERA_MS, Math.ceil(parseFloat(m[1]) * 1000) + 500);
+  if (Number.isFinite(header) && header > 0) return header * 1000;
+  const m = /try again in (?:(\d+)h)?(?:(\d+)m)?([\d.]+)s/i.exec(dados?.error?.message || '');
+  if (m) return Math.ceil(((Number(m[1] || 0) * 60 + Number(m[2] || 0)) * 60 + parseFloat(m[3])) * 1000) + 500;
   return null;
 }
+
+/** Modelo que estourou o limite diario: nao chama de novo ate liberar. */
+const bloqueadoAte = new Map();
 
 /**
  * Retenta apenas em 429/5xx - erro de chave nao adianta repetir.
@@ -155,6 +160,14 @@ export async function completar({
   const modeloUsado = modelo || config.groq.model;
   const opcoesRetry = interativo ? { maxEsperaMs: 8_000 } : {};
 
+  const liberaEm = (bloqueadoAte.get(modeloUsado) || 0) - Date.now();
+  if (liberaEm > 0) {
+    const err = new AppError(`Groq: limite diario de tokens do modelo ${modeloUsado} atingido.`, 429);
+    err.groqStatus = 429;
+    err.esperaMs = liberaEm;
+    throw err;
+  }
+
   const formatos = [];
   if (esquema && !semSchema.has(modeloUsado)) {
     formatos.push({ type: 'json_schema', json_schema: { name: 'analise', strict: true, schema: esquema } });
@@ -187,6 +200,14 @@ export async function completar({
       return { conteudo, modelo: dados?.model || modeloUsado, uso: dados?.usage || null };
     } catch (err) {
       ultimo = err;
+      // espera maior que um minuto e o limite diario: para de insistir ate liberar
+      if (err.groqStatus === 429 && err.esperaMs > 60_000) {
+        bloqueadoAte.set(modeloUsado, Date.now() + err.esperaMs);
+        logger.warn(
+          'groq',
+          `Limite diario do modelo ${modeloUsado} atingido. Volta em ${Math.ceil(err.esperaMs / 60_000)} min; ate la a classificacao e local.`
+        );
+      }
       if (err.groqStatus !== 400) throw err;
 
       if (err.codigo === 'json_validate_failed') {

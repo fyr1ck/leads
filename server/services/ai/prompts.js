@@ -59,8 +59,25 @@ NUNCA:
 - Se apresentar de novo se Henrique ja se apresentou na conversa.
 - Escrever mais de 3 linhas curtas ou fazer mais de uma pergunta.`;
 
-function blocoSistema() {
-  const skill = carregarSkill();
+/**
+ * Secoes da Skill que so servem para o primeiro contato ou para usar a Skill
+ * direto num chat: prospeccao no Maps, score, aberturas, gatilhos, audio,
+ * personalizacao, modo cacador, formato e comandos. Nas conversas elas so
+ * gastavam o limite diario de tokens da Groq (~45% da Skill).
+ * Os numeros sao os titulos "# N." do arquivo: renumerou a Skill, revise aqui.
+ */
+const SECOES_SO_PROSPECCAO = new Set([4, 5, 6, 7, 8, 9, 10, 11, 15, 28, 29, 30, 34, 35]);
+
+export function skillParaConversa(skill) {
+  return String(skill || '')
+    .split(/\n(?=# \d+\. )/)
+    .filter((parte) => !SECOES_SO_PROSPECCAO.has(Number(/^# (\d+)\. /.exec(parte)?.[1])))
+    .join('\n');
+}
+
+function blocoSistema({ conversa = false } = {}) {
+  const inteira = carregarSkill();
+  const skill = conversa && inteira ? skillParaConversa(inteira) : inteira;
   const { saudacao, horaLocal, fuso } = contextoDeHorario();
   // Configuracao comercial do painel (precos, objecoes, FAQ) - spec 65.
   let configuracao = '';
@@ -167,7 +184,7 @@ export function promptAnaliseResposta({ lead, mensagem, historico = [] }) {
     '}'
   ].join('\n');
 
-  return { sistema: blocoSistema(), usuario };
+  return { sistema: blocoSistema({ conversa: true }), usuario };
 }
 
 /** Copiloto de vendas dentro da conversa (spec 63). */
@@ -205,7 +222,7 @@ export function promptCopiloto({ lead, historico = [], memoria = '' }) {
     .filter((l) => l !== '')
     .join('\n');
 
-  return { sistema: blocoSistema(), usuario };
+  return { sistema: blocoSistema({ conversa: true }), usuario };
 }
 
 /** Mensagem de follow-up (spec 66). */
@@ -242,7 +259,7 @@ export function promptFollowUp({ lead, historico = [], dias = 1, memoria = '' })
     .filter((l) => l !== '')
     .join('\n');
 
-  return { sistema: blocoSistema(), usuario };
+  return { sistema: blocoSistema({ conversa: true }), usuario };
 }
 
 /** Prompt do proximo passo comercial na Central de Oportunidades (spec 58.6). */
@@ -268,5 +285,5 @@ export function promptProximoPasso({ lead, historico = [] }) {
     'Escreva no maximo 3 linhas, seguindo os CASOS COMUNS e a Skill, sem inventar preco, prazo ou resultado.',
     'RESPONDA APENAS COM O TEXTO DA MENSAGEM.'
   ].join('\n');
-  return { sistema: blocoSistema(), usuario };
+  return { sistema: blocoSistema({ conversa: true }), usuario };
 }

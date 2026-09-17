@@ -93,3 +93,31 @@ test('acao interativa com limite estourado avisa na hora em vez de travar a tela
   assert.equal(chamadas.length, 1);
   assert.ok(Date.now() - inicio < 2000, 'nao pode ficar esperando os 34s');
 });
+
+test('limite DIARIO: nao fica tentando de 40 em 40s e para de chamar ate liberar', async () => {
+  const diario = {
+    status: 429,
+    body: { error: { message: 'Rate limit reached on tokens per day (TPD): Limit 200000, Used 196974, Requested 6781. Please try again in 27m2.16s.' } }
+  };
+  const chamadas = roteiro([diario, ok('nao deveria chegar aqui')]);
+  const inicio = Date.now();
+  await assert.rejects(
+    () => completar({ sistema: 's', usuario: 'u', modelo: 'modelo-diario' }),
+    (err) => err.esperaMs > 27 * 60_000 && /limite diario/i.test(mensagemAmigavel(err))
+  );
+  assert.equal(chamadas.length, 1, 'tarefa de fundo tambem desiste na hora');
+  assert.ok(Date.now() - inicio < 2000);
+
+  // proxima analise: nem chega a chamar a Groq (cada tentativa tambem conta no limite)
+  await assert.rejects(() => completar({ sistema: 's', usuario: 'u', modelo: 'modelo-diario' }), (err) => err.groqStatus === 429);
+  assert.equal(chamadas.length, 1);
+});
+
+test('conversa usa so as secoes da Skill que servem para responder', async () => {
+  const { skillParaConversa } = await import('../server/services/ai/prompts.js');
+  const skill = '# SKILL\n## 1. IDENTIDADE\nsou o Henrique\n# 8. ABERTURA PADRAO\noi\n# 23. OBJECAO: "MANDA O PRECO"\ndepende\n# 28. AUDIO\nroteiro';
+  const conversa = skillParaConversa(skill);
+  assert.match(conversa, /IDENTIDADE/);
+  assert.match(conversa, /MANDA O PRECO/);
+  assert.doesNotMatch(conversa, /ABERTURA PADRAO|AUDIO/);
+});
